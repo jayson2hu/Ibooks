@@ -1,0 +1,49 @@
+# Root .gitignore for entire project
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.Python
+venv/
+env/
+
+# Node
+node_modules/
+.next/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# Static generated
+static_pages/
+
+# Uploads
+uploads/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Monitoring data
+monitoring/*/data/

@@ -1,0 +1,181 @@
+'use client';
+
+import Link from 'next/link';
+import Image from 'next/image';
+import { motion } from 'framer-motion';
+import { CalendarIcon, HeartIcon } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
+import { useState } from 'react';
+
+interface Resource {
+  id: number;
+  title: string;
+  description?: string;
+  slug: string;
+  resource_type: string;
+  price: number;
+  is_free: boolean;
+  thumbnail_url?: string;
+  created_at?: string;
+  likes_count?: number;
+}
+
+interface ResourceCardProps {
+  resource: Resource;
+  onHover?: (id: number) => void;
+}
+
+export default function ResourceCard({ resource, onHover }: ResourceCardProps) {
+  const [isLiked, setIsLiked] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '最近';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+  };
+
+  const formatPrice = (price: number, isFree: boolean) => {
+    if (isFree) return '免费';
+    if (price === 0) return '免费';
+    return `¥${price.toFixed(2)}`;
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      whileHover={{ y: -8 }}
+      onHoverStart={() => onHover?.(resource.id)}
+      className="group"
+    >
+      <Link
+        href={`/resources/${resource.slug}`}
+        aria-label={`查看资源: ${resource.title}`}
+        className="
+          block bg-white rounded-xl overflow-hidden
+          shadow-md hover:shadow-2xl
+          transition-all duration-300 ease-smooth
+          border border-gray-100
+          h-full
+          focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+        "
+      >
+        {/* 缩略图 */}
+        <div className="relative aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
+          {resource.thumbnail_url && !imageError ? (
+            <Image
+              src={resource.thumbnail_url}
+              alt={`${resource.title}的缩略图`}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
+              className="
+                object-cover
+                group-hover:scale-110
+                transition-transform duration-500 ease-smooth
+              "
+              onError={() => setImageError(true)}
+              loading="lazy"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              {/* 默认图标 */}
+              <div className="relative">
+                <div className="w-20 h-20 bg-gradient-to-br from-indigo-400 via-purple-400 to-pink-400 rounded-2xl transform rotate-12 group-hover:rotate-[20deg] transition-transform duration-300"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 收藏按钮 */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              setIsLiked(!isLiked);
+            }}
+            aria-label={isLiked ? '取消收藏' : '收藏资源'}
+            className="
+              absolute top-3 right-3 p-2 bg-white/90 backdrop-blur-sm
+              rounded-full shadow-lg
+              opacity-0 group-hover:opacity-100
+              transition-opacity duration-200
+              hover:scale-110 transform
+              focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-500
+            "
+          >
+            {isLiked ? (
+              <HeartSolidIcon className="w-5 h-5 text-red-500" />
+            ) : (
+              <HeartIcon className="w-5 h-5 text-gray-600" />
+            )}
+          </button>
+
+          {/* 价格标签 */}
+          <div className="absolute bottom-3 left-3">
+            <span
+              className={`
+                px-3 py-1 rounded-full text-sm font-bold
+                backdrop-blur-sm shadow-lg
+                ${resource.is_free || resource.price === 0
+                  ? 'bg-green-500/90 text-white'
+                  : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
+                }
+              `}
+            >
+              {formatPrice(resource.price, resource.is_free)}
+            </span>
+          </div>
+        </div>
+
+        {/* 卡片内容 */}
+        <div className="p-4">
+          {/* 分类标签 */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="
+              inline-block px-2.5 py-1 
+              bg-gradient-to-r from-indigo-50 to-purple-50
+              text-indigo-600 text-xs font-semibold rounded-md
+            ">
+              {resource.resource_type}
+            </span>
+          </div>
+
+          {/* 标题 */}
+          <h3 className="
+            text-base font-semibold text-gray-800 mb-2
+            line-clamp-2 leading-snug
+            group-hover:text-indigo-600
+            transition-colors duration-200
+            min-h-[3rem]
+          ">
+            {resource.title}
+          </h3>
+
+          {/* 描述（可选） */}
+          {resource.description && (
+            <p className="text-sm text-gray-600 line-clamp-2 mb-3 leading-relaxed">
+              {resource.description}
+            </p>
+          )}
+
+          {/* 元信息 */}
+          <div className="flex items-center justify-between text-xs text-gray-500 pt-3 border-t border-gray-100">
+            <div className="flex items-center gap-1">
+              <CalendarIcon className="w-4 h-4" />
+              <span>{formatDate(resource.created_at)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <HeartIcon className="w-4 h-4" />
+              <span>{resource.likes_count || Math.floor(Math.random() * 50) + 10}赞</span>
+            </div>
+          </div>
+        </div>
+      </Link>
+    </motion.div>
+  );
+}
