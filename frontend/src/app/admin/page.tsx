@@ -6,6 +6,7 @@ import StatsCard from '@/components/admin/StatsCard';
 import StatsSkeleton from '@/components/admin/StatsSkeleton';
 import ErrorMessage from '@/components/admin/ErrorMessage';
 import { api } from '@/lib/api';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 
 interface Stats {
     users: number;
@@ -17,6 +18,7 @@ interface Stats {
 }
 
 export default function AdminDashboard() {
+    const { isAuthenticated, isLoading: isAuthLoading } = useAdminAuth();
     const [stats, setStats] = useState<Stats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -36,8 +38,11 @@ export default function AdminDashboard() {
     };
 
     useEffect(() => {
-        fetchStats();
-    }, []);
+        // Only fetch stats if authenticated
+        if (isAuthenticated) {
+            fetchStats();
+        }
+    }, [isAuthenticated]);
 
     // Format number with commas
     const formatNumber = (num: number): string => {

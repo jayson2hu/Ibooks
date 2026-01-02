@@ -35,6 +35,10 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     """
     to_encode = data.copy()
     
+    # Ensure subject is a string (required by JWT spec and python-jose)
+    if "sub" in to_encode:
+        to_encode["sub"] = str(to_encode["sub"])
+    
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:

@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function AdminHeader() {
     const [showUserMenu, setShowUserMenu] = useState(false);
+    const { adminLogout } = useAuth();
 
     return (
         <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
@@ -61,7 +63,10 @@ export default function AdminHeader() {
                                     系统设置
                                 </Link>
                                 <div className="border-t border-gray-200 my-1"></div>
-                                <button className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100">
+                                <button
+                                    onClick={() => adminLogout()}
+                                    className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                                >
                                     退出登录
                                 </button>
                             </div>

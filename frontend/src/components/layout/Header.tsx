@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Header() {
     const [isScrolledState, setIsScrolled] = useState(false);
@@ -10,6 +11,7 @@ export default function Header() {
     const [searchQuery, setSearchQuery] = useState('');
     const router = useRouter();
     const pathname = usePathname();
+    const { isAuthenticated, isLoading, logout } = useAuth();
     // Force scrolled style on non-home pages to ensure visibility on white backgrounds
     const isScrolled = isScrolledState || pathname !== '/';
 
@@ -92,9 +94,43 @@ export default function Header() {
                                     }`}></span>
                             </Link>
                         ))}
+
+                        {/* Auth Buttons */}
+                        {isLoading ? (
+                            <div className="w-20 h-8"></div> // Placeholder to prevent layout shift
+                        ) : isAuthenticated ? (
+                            <div className="flex items-center gap-4">
+                                <Link
+                                    href="/admin"
+                                    className={`font-medium text-sm tracking-wide transition-colors ${isScrolled ? 'text-gray-600 hover:text-blue-600' : 'text-white/90 hover:text-white'
+                                        }`}
+                                >
+                                    管理后台
+                                </Link>
+                                <button
+                                    onClick={logout}
+                                    className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 ${isScrolled
+                                        ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        : 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
+                                        }`}
+                                >
+                                    退出
+                                </button>
+                            </div>
+                        ) : (
+                            <Link
+                                href="/login"
+                                className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 shadow-sm hover:shadow-md transform hover:-translate-y-0.5 ${isScrolled
+                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                    : 'bg-white text-blue-600 hover:bg-gray-50'
+                                    }`}
+                            >
+                                登录
+                            </Link>
+                        )}
                     </nav>
 
-                    {/* Mobile Menu Button */}
+                    {/* Mobile Menu Button with simplified logic for now */}
                     <button
                         className="md:hidden p-2 rounded-lg hover:bg-black/5 transition-colors"
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}

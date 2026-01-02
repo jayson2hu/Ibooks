@@ -37,7 +37,16 @@ apiClient.interceptors.response.use(
             // Handle unauthorized - clear token and redirect to login
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('token');
-                window.location.href = '/login';
+
+                // Redirect to appropriate login page based on current URL
+                const currentPath = window.location.pathname;
+                const isAdminRoute = currentPath.startsWith('/admin');
+                const loginPath = isAdminRoute ? '/admin/login' : '/login';
+
+                // Only redirect if not already on a login page
+                if (currentPath !== loginPath) {
+                    window.location.href = loginPath;
+                }
             }
         }
         return Promise.reject(error);
