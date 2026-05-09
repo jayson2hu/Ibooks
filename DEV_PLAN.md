@@ -708,8 +708,10 @@ PUT /api/v1/admin/settings/signin
 3. 支付宝回调只服务充值订单。
 
 **小功能自测**:
-- [ ] 全局搜索没有前端调用旧资源支付接口。
-- [ ] 资源购买不会生成第三方支付链接。
+- [x] 全局搜索没有前端调用旧资源支付接口。
+- [x] 资源购买不会生成第三方支付链接。
+
+**小功能测试记录**: 2026-05-09，删除旧资源订单直付 `backend/app/api/v1/payments.py`；运行 `rg -n "api\\.payments|payments\\.alipayCreate|/payments|continuePay" frontend/src`，无结果；运行 `conda run -n py311 python -m pytest tests/test_payments.py tests/test_recharge_payments.py -v`，结果 8 passed。
 
 ### N08-T2：端到端业务验收
 
