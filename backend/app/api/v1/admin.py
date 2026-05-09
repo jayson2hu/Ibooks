@@ -1,21 +1,57 @@
 """
 Admin endpoints for user management and statistics.
 """
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import or_, select, func
+from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from math import ceil
 from app.database import get_db
 from app.dependencies import get_current_admin
+from app.models.recharge import RechargeOrder, RechargeOrderStatus, RechargePackage
 from app.schemas.user import UserResponse, UserUpdateAdmin
+from app.schemas.recharge import (
+    RechargeOrderListResponse,
+    RechargePackageCreate,
+    RechargePackageResponse,
+    RechargePackageUpdate,
+)
+from app.schemas.site_settings import SiteSettingResponse
+from app.schemas.wallet import (
+    AdminCoinLedgerListResponse,
+    AdminWalletListResponse,
+    WalletAdjustRequest,
+    WalletResponse,
+)
 from app.models.user import User
 from app.models.resource import Resource
 from app.models.category import Category
 from app.models.audit_log import AuditLog
+from app.models.site_settings import SiteSetting
+from app.models.wallet import CoinLedger, CoinLedgerType, Wallet
+from app.services.site_settings import (
+    SIGNIN_CATEGORY,
+    SIGNIN_ENABLED_KEY,
+    SIGNIN_REWARD_COINS_KEY,
+)
+from app.services.wallet import credit_wallet, debit_wallet, get_or_create_wallet
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+def paginated_response(items, total: int, page: int, page_size: int) -> dict:
+    """Build the project's common paginated response shape."""
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": ceil(total / page_size) if total > 0 else 0,
+    }
 
 
 @router.get("/stats")
@@ -142,3 +178,249 @@ async def get_audit_logs(
         "page_size": page_size,
         "pages": ceil(total / page_size) if total and total > 0 else 0
     }
+
+
+@router.get("/wallets", response_model=AdminWalletListResponse)
+async def list_wallets(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_admin),
+):
+    """List user wallets with optional email/username search."""
+    query = select(Wallet).options(selectinload(Wallet.user)).join(User)
+
+    if search:
+        keyword = f"%{search.strip()}%"
+        query = query.where(or_(User.email.ilike(keyword), User.username.ilike(keyword)))
+
+    total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    result = await db.execute(
+        query
+        .order_by(Wallet.updated_at.desc(), Wallet.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return paginated_response(result.scalars().all(), total or 0, page, page_size)
+
+
+@router.get("/coin-ledger", response_model=AdminCoinLedgerListResponse)
+async def list_coin_ledger(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    type: Optional[CoinLedgerType] = None,
+    user_id: Optional[int] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_admin),
+):
+    """List all coin ledger entries with filters."""
+    query = select(CoinLedger).options(selectinload(CoinLedger.user))
+
+    if type:
+        query = query.where(CoinLedger.type == type)
+    if user_id:
+        query = query.where(CoinLedger.user_id == user_id)
+    if start_date:
+        query = query.where(CoinLedger.created_at >= start_date)
+    if end_date:
+        query = query.where(CoinLedger.created_at <= end_date)
+
+    total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    result = await db.execute(
+        query
+        .order_by(CoinLedger.created_at.desc(), CoinLedger.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return paginated_response(result.scalars().all(), total or 0, page, page_size)
+
+
+@router.post("/wallets/{user_id}/adjust", response_model=WalletResponse)
+async def adjust_wallet(
+    user_id: int,
+    request: WalletAdjustRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_admin),
+):
+    """Manually add or deduct coins from a user wallet."""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    if request.amount == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="调整金额不能为 0",
+        )
+
+    description = request.description or f"后台调整：{current_user.username}"
+    if request.amount > 0:
+        wallet, _ = await credit_wallet(
+            db,
+            user_id,
+            request.amount,
+            CoinLedgerType.ADMIN_ADJUST,
+            description=description,
+        )
+    else:
+        wallet, _ = await debit_wallet(
+            db,
+            user_id,
+            abs(request.amount),
+            CoinLedgerType.ADMIN_ADJUST,
+            description=description,
+        )
+
+    await db.commit()
+    await db.refresh(wallet)
+    return wallet
+
+
+@router.get("/recharge-orders", response_model=RechargeOrderListResponse)
+async def list_recharge_orders(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status_filter: Optional[RechargeOrderStatus] = Query(None, alias="status"),
+    user_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_admin),
+):
+    """List all recharge orders."""
+    query = select(RechargeOrder).options(
+        selectinload(RechargeOrder.package),
+        selectinload(RechargeOrder.user),
+    )
+    if status_filter:
+        query = query.where(RechargeOrder.status == status_filter)
+    if user_id:
+        query = query.where(RechargeOrder.user_id == user_id)
+
+    total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    result = await db.execute(
+        query
+        .order_by(RechargeOrder.created_at.desc(), RechargeOrder.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return paginated_response(result.scalars().all(), total or 0, page, page_size)
+
+
+@router.get("/recharge-packages", response_model=List[RechargePackageResponse])
+async def list_recharge_packages(
+    include_inactive: bool = True,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_admin),
+):
+    """List recharge packages for admin management."""
+    query = select(RechargePackage)
+    if not include_inactive:
+        query = query.where(RechargePackage.is_active == True)
+    result = await db.execute(
+        query.order_by(RechargePackage.sort_order.desc(), RechargePackage.amount.asc(), RechargePackage.id.asc())
+    )
+    return result.scalars().all()
+
+
+@router.post("/recharge-packages", response_model=RechargePackageResponse, status_code=status.HTTP_201_CREATED)
+async def create_recharge_package(
+    package_data: RechargePackageCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_admin),
+):
+    """Create a recharge package."""
+    package = RechargePackage(**package_data.model_dump())
+    db.add(package)
+    await db.commit()
+    await db.refresh(package)
+    return package
+
+
+@router.patch("/recharge-packages/{package_id}", response_model=RechargePackageResponse)
+async def update_recharge_package(
+    package_id: int,
+    package_data: RechargePackageUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_admin),
+):
+    """Update a recharge package."""
+    package = await db.get(RechargePackage, package_id)
+    if not package:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Recharge package not found",
+        )
+
+    for field, value in package_data.model_dump(exclude_unset=True).items():
+        setattr(package, field, value)
+
+    await db.commit()
+    await db.refresh(package)
+    return package
+
+
+@router.get("/settings/signin")
+async def get_signin_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_admin),
+):
+    """Get sign-in feature settings."""
+    result = await db.execute(
+        select(SiteSetting).where(
+            SiteSetting.key.in_([SIGNIN_ENABLED_KEY, SIGNIN_REWARD_COINS_KEY])
+        )
+    )
+    settings = {setting.key: setting for setting in result.scalars().all()}
+    return {
+        "enabled": settings.get(SIGNIN_ENABLED_KEY).value.lower() == "true"
+        if settings.get(SIGNIN_ENABLED_KEY) else False,
+        "reward_coins": int(settings.get(SIGNIN_REWARD_COINS_KEY).value)
+        if settings.get(SIGNIN_REWARD_COINS_KEY) else 5,
+    }
+
+
+@router.put("/settings/signin")
+async def update_signin_settings(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_admin),
+):
+    """Update sign-in feature settings."""
+    enabled = bool(payload.get("enabled", False))
+    try:
+        reward_coins = int(payload.get("reward_coins", 5))
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="签到奖励币数必须为正整数",
+        )
+    if reward_coins <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="签到奖励币数必须为正整数",
+        )
+
+    values = {
+        SIGNIN_ENABLED_KEY: "true" if enabled else "false",
+        SIGNIN_REWARD_COINS_KEY: str(reward_coins),
+    }
+    for key, value in values.items():
+        result = await db.execute(select(SiteSetting).where(SiteSetting.key == key))
+        setting = result.scalar_one_or_none()
+        if setting:
+            setting.value = value
+            setting.updated_by = current_user.username
+        else:
+            db.add(SiteSetting(
+                key=key,
+                value=value,
+                category=SIGNIN_CATEGORY,
+                updated_by=current_user.username,
+            ))
+
+    await db.commit()
+    return {"enabled": enabled, "reward_coins": reward_coins}

@@ -37,6 +37,7 @@ apiClient.interceptors.response.use(
             // Handle unauthorized - clear token and redirect to login
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('token');
+                localStorage.removeItem('user_role');
 
                 // Redirect to appropriate login page based on current URL
                 const currentPath = window.location.pathname;
@@ -62,9 +63,18 @@ export const api = {
             apiClient.post('/auth/register', data),
         login: (data: { email: string; password: string }) =>
             apiClient.post('/auth/login', data),
+        adminLogin: (data: { email: string; password: string }) =>
+            apiClient.post('/auth/admin/login', data),
+        verifyEmail: (token: string) =>
+            apiClient.get(`/auth/verify-email?token=${encodeURIComponent(token)}`),
+        forgotPassword: (email: string) =>
+            apiClient.post('/auth/forgot-password', { email }),
+        resetPassword: (token: string, password: string) =>
+            apiClient.post('/auth/reset-password', { token, password }),
         logout: () => {
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('token');
+                localStorage.removeItem('user_role');
             }
         },
         getMe: () => apiClient.get('/auth/me'),
@@ -82,6 +92,7 @@ export const api = {
             search?: string;
         }) => apiClient.get('/resources', { params }),
         get: (slug: string) => apiClient.get(`/resources/${slug}`),
+        getAccess: (slug: string) => apiClient.get(`/resources/${slug}/access`),
         create: (data: any) => apiClient.post('/resources', data),
         update: (id: number, data: any) => apiClient.patch(`/resources/${id}`, data),
         delete: (id: number) => apiClient.delete(`/resources/${id}`),
@@ -103,6 +114,10 @@ export const api = {
     contacts: {
         list: (activeOnly = true) =>
             apiClient.get('/contacts', { params: { active_only: activeOnly } }),
+        adminList: () =>
+            apiClient.get('/contacts', { params: { active_only: false } }),
+        update: (id: number, data: any) => apiClient.patch(`/contacts/${id}`, data),
+        delete: (id: number) => apiClient.delete(`/contacts/${id}`),
     },
 
     // FAQs
@@ -138,7 +153,53 @@ export const api = {
     admin: {
         getStats: () => apiClient.get('/admin/stats'),
         getUsers: (params?: any) => apiClient.get('/admin/users', { params }),
+        updateUser: (id: number, data: any) => apiClient.patch(`/admin/users/${id}`, data),
         getAuditLogs: (params?: any) => apiClient.get('/admin/audit-logs', { params }),
+        getWallets: (params?: any) => apiClient.get('/admin/wallets', { params }),
+        adjustWallet: (userId: number, data: { amount: number; description?: string }) =>
+            apiClient.post(`/admin/wallets/${userId}/adjust`, data),
+        getCoinLedger: (params?: any) => apiClient.get('/admin/coin-ledger', { params }),
+        getRechargeOrders: (params?: any) => apiClient.get('/admin/recharge-orders', { params }),
+        getRechargePackages: (params?: any) => apiClient.get('/admin/recharge-packages', { params }),
+        createRechargePackage: (data: any) => apiClient.post('/admin/recharge-packages', data),
+        updateRechargePackage: (id: number, data: any) => apiClient.patch(`/admin/recharge-packages/${id}`, data),
+        getSigninSettings: () => apiClient.get('/admin/settings/signin'),
+        updateSigninSettings: (data: { enabled: boolean; reward_coins: number }) =>
+            apiClient.put('/admin/settings/signin', data),
+    },
+
+    // Orders
+    orders: {
+        create: (resourceId: number) => apiClient.post('/orders', { resource_id: resourceId }),
+        my: (params?: any) => apiClient.get('/orders/my', { params }),
+        list: (params?: any) => apiClient.get('/orders', { params }),
+        adminList: (params?: any) => apiClient.get('/orders', { params }),
+        get: (orderNo: string) => apiClient.get(`/orders/${orderNo}`),
+        cancel: (orderNo: string) => apiClient.patch(`/orders/${orderNo}/cancel`),
+    },
+
+    // Wallet
+    wallet: {
+        me: () => apiClient.get('/wallet/me'),
+        ledger: (params?: any) => apiClient.get('/wallet/ledger', { params }),
+    },
+
+    // Daily sign-in
+    signin: {
+        status: () => apiClient.get('/signin/status'),
+        claim: () => apiClient.post('/signin'),
+    },
+
+    // Recharge
+    recharge: {
+        packages: () => apiClient.get('/recharge/packages'),
+        createOrder: (packageId: number, paymentMethod: 'alipay' | 'wechat' = 'alipay') =>
+            apiClient.post('/recharge/orders', { package_id: packageId, payment_method: paymentMethod }),
+        myOrders: (params?: any) => apiClient.get('/recharge/orders/my', { params }),
+        getOrder: (rechargeNo: string) => apiClient.get(`/recharge/orders/${rechargeNo}`),
+        cancelOrder: (rechargeNo: string) => apiClient.patch(`/recharge/orders/${rechargeNo}/cancel`),
+        alipayCreate: (rechargeNo: string) =>
+            apiClient.post('/recharge/alipay/create', { recharge_no: rechargeNo }),
     },
 };
 

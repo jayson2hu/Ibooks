@@ -9,6 +9,10 @@ const menuItems = [
     { name: '分类管理', href: '/admin/categories', icon: '🏷️' },
     { name: '用户管理', href: '/admin/users', icon: '👥' },
     { name: '订单管理', href: '/admin/orders', icon: '🛒' },
+    { name: '钱包管理', href: '/admin/wallets', icon: '💰' },
+    { name: '资产流水', href: '/admin/coin-ledger', icon: '📒' },
+    { name: '充值订单', href: '/admin/recharge-orders', icon: '💳' },
+    { name: '充值套餐', href: '/admin/recharge-packages', icon: '🎁' },
     { name: '系统设置', href: '/admin/settings', icon: '⚙️' },
 ];
 

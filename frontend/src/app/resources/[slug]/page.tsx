@@ -1,6 +1,7 @@
 import { api } from '@/lib/api';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import ResourceAccessCard from '@/components/resource/ResourceAccessCard';
 
 interface PageProps {
     params: {
@@ -163,7 +164,9 @@ export default async function ResourceDetailPage({ params }: PageProps) {
                                     {resource.is_free ? (
                                         <span className="text-3xl font-bold text-success">免费</span>
                                     ) : (
-                                        <span className="text-3xl font-bold text-primary">¥{resource.price}</span>
+                                        <span className="text-3xl font-bold text-primary">
+                                            {resource.coin_price} 书币
+                                        </span>
                                     )}
                                 </div>
 
@@ -189,10 +192,15 @@ export default async function ResourceDetailPage({ params }: PageProps) {
                                     )}
                                 </div>
 
-                                {/* CTA */}
-                                <button className="btn btn-primary w-full mb-3">
-                                    获取资源
-                                </button>
+                                {/* Resource Access */}
+                                <div className="mb-3">
+                                    <ResourceAccessCard
+                                        resourceId={resource.id}
+                                        slug={resource.slug}
+                                        isFree={resource.is_free}
+                                        coinPrice={Number(resource.coin_price || 0)}
+                                    />
+                                </div>
                                 <button className="btn btn-secondary w-full">
                                     分享
                                 </button>

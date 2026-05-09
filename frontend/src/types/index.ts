@@ -23,6 +23,7 @@ export interface Resource {
     category_id?: number;
     tags: string[];
     price: number;
+    coin_price: number;
     original_price?: number;
     is_free: boolean;
     file_size?: string;
@@ -43,6 +44,125 @@ export interface ResourceDetail extends Resource {
     access_code?: string;
     backup_links: string[];
     preview_images: string[];
+}
+
+export interface ResourceAccess {
+    cloud_link?: string | null;
+    backup_links: string[];
+    access_code?: string | null;
+}
+
+export type OrderStatus = 'pending' | 'paid' | 'cancelled' | 'refunded';
+export type PaymentMethod = 'alipay' | 'wechat' | 'free' | 'coin';
+
+export interface Order {
+    id: number;
+    order_no: string;
+    user_id: number;
+    resource_id: number;
+    amount: number | string;
+    coin_amount: number;
+    payment_method?: PaymentMethod | null;
+    status: OrderStatus;
+    trade_no?: string | null;
+    paid_at?: string | null;
+    created_at: string;
+    updated_at: string;
+    resource?: Resource | null;
+    user?: User | null;
+}
+
+export interface AlipayCreateResponse {
+    payment_url: string;
+    order_no?: string;
+    recharge_no?: string;
+}
+
+export interface Wallet {
+    id: number;
+    user_id: number;
+    balance: number;
+    total_recharged: number;
+    total_spent: number;
+    total_rewarded: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AdminWallet extends Wallet {
+    user?: User | null;
+}
+
+export type CoinLedgerType = 'recharge' | 'purchase' | 'refund' | 'signin' | 'admin_adjust';
+
+export interface CoinLedger {
+    id: number;
+    user_id: number;
+    wallet_id: number;
+    amount: number;
+    balance_after: number;
+    type: CoinLedgerType;
+    related_order_no?: string | null;
+    description?: string | null;
+    created_at: string;
+}
+
+export interface AdminCoinLedger extends CoinLedger {
+    user?: User | null;
+}
+
+export interface SigninStatus {
+    enabled: boolean;
+    reward_coins: number;
+    signed_in_today: boolean;
+    signin_date: string;
+}
+
+export interface SigninResult {
+    id: number;
+    user_id: number;
+    signin_date: string;
+    reward_coins: number;
+    created_at: string;
+    balance: number;
+}
+
+export interface RechargePackage {
+    id: number;
+    name: string;
+    coins: number;
+    bonus_coins: number;
+    amount: number | string;
+    is_active: boolean;
+    sort_order: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export type RechargeOrderStatus = 'pending' | 'paid' | 'cancelled' | 'failed';
+export type RechargePaymentMethod = 'alipay' | 'wechat';
+
+export interface RechargeOrder {
+    id: number;
+    recharge_no: string;
+    user_id: number;
+    package_id?: number | null;
+    coins: number;
+    bonus_coins: number;
+    amount: number | string;
+    payment_method: RechargePaymentMethod;
+    status: RechargeOrderStatus;
+    trade_no?: string | null;
+    paid_at?: string | null;
+    created_at: string;
+    updated_at: string;
+    package?: RechargePackage | null;
+    user?: User | null;
+}
+
+export interface SigninSettings {
+    enabled: boolean;
+    reward_coins: number;
 }
 
 export interface Category {

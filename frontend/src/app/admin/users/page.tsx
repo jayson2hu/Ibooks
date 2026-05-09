@@ -6,27 +6,21 @@ import { api } from '@/lib/api';
 export default function UserManagement() {
     const [users, setUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [updatingId, setUpdatingId] = useState<number | null>(null);
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
+    const pageSize = 20;
 
     const fetchUsers = async () => {
         setLoading(true);
+        setError('');
         try {
-            // Assuming we have a user list API. If not, we might need to add it or use a placeholder.
-            // For now, let's mock it or assume api.admin.getUsers exists
-            // const response = await api.admin.getUsers({ page, page_size: 10 });
-            // setUsers(response.data || []);
-            // setTotal(response.total || 0);
-
-            // Mock data since we might not have exposed user list API yet
-            setUsers([
-                { id: 1, username: 'admin', email: 'admin@example.com', role: 'ADMIN', status: 'ACTIVE', created_at: new Date().toISOString() },
-                { id: 2, username: 'user1', email: 'user1@example.com', role: 'USER', status: 'ACTIVE', created_at: new Date().toISOString() },
-                { id: 3, username: 'user2', email: 'user2@example.com', role: 'USER', status: 'BANNED', created_at: new Date().toISOString() },
-            ]);
-            setTotal(3);
-        } catch (error) {
-            console.error('Failed to fetch users:', error);
+            const response = await api.admin.getUsers({ page, page_size: pageSize });
+            setUsers(response.data || []);
+            setTotal(response.data?.length || 0);
+        } catch (err: any) {
+            setError(err.response?.data?.detail || '无法加载用户列表');
         } finally {
             setLoading(false);
         }
@@ -36,11 +30,39 @@ export default function UserManagement() {
         fetchUsers();
     }, [page]);
 
+    const updateUser = async (id: number, data: any) => {
+        setUpdatingId(id);
+        setError('');
+        try {
+            const response = await api.admin.updateUser(id, data);
+            setUsers((prev) => prev.map((user) => user.id === id ? response.data : user));
+        } catch (err: any) {
+            setError(err.response?.data?.detail || '用户更新失败');
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
+    const toggleStatus = (user: any) => {
+        const nextStatus = user.status === 'active' ? 'suspended' : 'active';
+        updateUser(user.id, { status: nextStatus });
+    };
+
+    const changeRole = (user: any, role: string) => {
+        updateUser(user.id, { role });
+    };
+
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">用户管理</h1>
             </div>
+
+            {error && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                </div>
+            )}
 
             {/* Table */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
@@ -77,43 +99,66 @@ export default function UserManagement() {
                                     </td>
                                     <td className="px-6 py-4 text-gray-600">{user.email}</td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 text-xs rounded-full ${user.role === 'ADMIN'
-                                                ? 'bg-purple-50 text-purple-600'
-                                                : 'bg-gray-100 text-gray-600'
-                                            }`}>
-                                            {user.role}
-                                        </span>
+                                        <select
+                                            value={user.role}
+                                            disabled={updatingId === user.id || user.role === 'admin'}
+                                            onChange={(e) => changeRole(user, e.target.value)}
+                                            className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 disabled:bg-gray-50 disabled:text-gray-400"
+                                        >
+                                            <option value="user">用户</option>
+                                            <option value="moderator">协管员</option>
+                                            <option value="admin">管理员</option>
+                                        </select>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 text-xs rounded-full ${user.status === 'ACTIVE'
+                                        <span className={`px-2 py-1 text-xs rounded-full ${user.status === 'active'
                                                 ? 'bg-green-50 text-green-600'
                                                 : 'bg-red-50 text-red-600'
                                             }`}>
-                                            {user.status === 'ACTIVE' ? '正常' : '封禁'}
+                                            {user.status === 'active' ? '正常' : '封禁'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-gray-500 text-sm">
                                         {new Date(user.created_at).toLocaleDateString()}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <button className="text-blue-500 hover:text-blue-700 text-sm mr-3">
-                                            编辑
+                                        <button
+                                            onClick={() => toggleStatus(user)}
+                                            disabled={updatingId === user.id || user.role === 'admin'}
+                                            className={`text-sm disabled:cursor-not-allowed disabled:text-gray-300 ${user.status === 'active'
+                                                    ? 'text-red-500 hover:text-red-700'
+                                                    : 'text-green-500 hover:text-green-700'
+                                                }`}
+                                        >
+                                            {updatingId === user.id ? '处理中...' : user.status === 'active' ? '封禁' : '解封'}
                                         </button>
-                                        {user.status === 'ACTIVE' ? (
-                                            <button className="text-red-500 hover:text-red-700 text-sm">
-                                                封禁
-                                            </button>
-                                        ) : (
-                                            <button className="text-green-500 hover:text-green-700 text-sm">
-                                                解封
-                                            </button>
-                                        )}
                                     </td>
                                 </tr>
                             ))
                         )}
                     </tbody>
                 </table>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
+                <span>当前页 {users.length} 条记录</span>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                        disabled={page === 1 || loading}
+                        className="rounded border border-gray-200 px-3 py-1 disabled:opacity-50"
+                    >
+                        上一页
+                    </button>
+                    <span className="px-2 py-1">第 {page} 页</span>
+                    <button
+                        onClick={() => setPage((prev) => prev + 1)}
+                        disabled={loading || total < pageSize}
+                        className="rounded border border-gray-200 px-3 py-1 disabled:opacity-50"
+                    >
+                        下一页
+                    </button>
+                </div>
             </div>
         </div>
     );

@@ -15,9 +15,27 @@ from app.schemas.site_settings import (
     SiteSettingsGroup
 )
 from app.schemas.common import Message
+from app.services.site_settings import SIGNIN_REWARD_COINS_KEY
 
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
+
+
+def validate_setting_value(key: str, value: str) -> None:
+    """Validate special setting values before persistence."""
+    if key == SIGNIN_REWARD_COINS_KEY:
+        try:
+            reward = int(value)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="签到奖励币数必须为正整数"
+            )
+        if reward <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="签到奖励币数必须为正整数"
+            )
 
 
 @router.get("", response_model=List[SiteSettingResponse])
@@ -104,7 +122,7 @@ async def get_setting(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Setting '{key}' not found"
         )
-    
+
     return setting
 
 
@@ -128,6 +146,8 @@ async def update_setting(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Setting '{key}' not found"
         )
+
+    validate_setting_value(key, setting_update.value)
     
     # Update setting
     setting.value = setting_update.value
@@ -164,9 +184,12 @@ async def batch_update_settings(
     for item in batch_update.settings:
         key = item.get("key")
         value = item.get("value")
+        category = item.get("category", "general")
         
         if not key or value is None:
             continue
+
+        validate_setting_value(key, value)
         
         result = await db.execute(
             select(SiteSetting).where(SiteSetting.key == key)
@@ -177,6 +200,14 @@ async def batch_update_settings(
             setting.value = value
             if hasattr(current_user, 'username'):
                 setting.updated_by = current_user.username
+            updated_count += 1
+        else:
+            db.add(SiteSetting(
+                key=key,
+                value=value,
+                category=category,
+                updated_by=current_user.username if hasattr(current_user, 'username') else None
+            ))
             updated_count += 1
     
     await db.commit()

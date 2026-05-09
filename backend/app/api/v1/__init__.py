@@ -2,7 +2,7 @@
 API v1 router aggregation.
 """
 from fastapi import APIRouter
-from app.api.v1 import auth, resources, categories, contacts, search, admin, seo, bulk_import, faqs, settings
+from app.api.v1 import auth, resources, categories, contacts, search, admin, seo, bulk_import, faqs, settings, orders, wallet, signin, recharge
 
 
 router = APIRouter()
@@ -18,3 +18,7 @@ router.include_router(admin.router)
 router.include_router(seo.router)
 router.include_router(bulk_import.router)
 router.include_router(settings.router)
+router.include_router(orders.router)
+router.include_router(wallet.router)
+router.include_router(signin.router)
+router.include_router(recharge.router)

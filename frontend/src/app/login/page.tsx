@@ -20,11 +20,10 @@ export default function LoginPage() {
             const response = await api.auth.login({ email, password });
             const { access_token } = response.data;
 
-            // Store token in localStorage
             localStorage.setItem('token', access_token);
+            localStorage.removeItem('user_role');
 
-            // Redirect to admin dashboard
-            router.push('/admin');
+            router.push('/');
         } catch (err: any) {
             console.error('Login error:', err);
             setError(err.response?.data?.detail || '登录失败，请检查邮箱和密码');

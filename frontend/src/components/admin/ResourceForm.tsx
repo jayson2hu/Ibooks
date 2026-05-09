@@ -14,7 +14,7 @@ export default function ResourceForm({ initialData, isEdit }: ResourceFormProps)
     const [loading, setLoading] = useState(false);
     const [categories, setCategories] = useState<any[]>([]);
 
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<any>({
         title: '',
         slug: '',
         description: '',
@@ -45,7 +45,7 @@ export default function ResourceForm({ initialData, isEdit }: ResourceFormProps)
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
-        setFormData(prev => ({
+        setFormData((prev: any) => ({
             ...prev,
             [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
         }));

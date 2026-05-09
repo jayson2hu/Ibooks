@@ -1,15 +1,24 @@
 """
 Test configuration and fixtures.
 """
+import os
 import pytest
 import asyncio
 from typing import Generator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from app.database import Base
+import pytest_asyncio
 
 
-# Test database URL (use SQLite for tests)
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+# Configure test settings before importing application modules.
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:////tmp/ibooks_test.db")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
+
+import app.models  # noqa: F401
+from app.database import Base, engine
+
+
+TEST_DATABASE_URL = os.environ["DATABASE_URL"]
 
 
 @pytest.fixture(scope="session")
@@ -39,3 +48,16 @@ async def db_session():
         await conn.run_sync(Base.metadata.drop_all)
     
     await engine.dispose()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_app_database():
+    """Reset the application database around each API test."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+
+    yield
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)

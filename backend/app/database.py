@@ -67,7 +67,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db():
-    """Initialize database (create tables)."""
+    """
+    Initialize database tables as a local-development fallback.
+
+    Production and Docker startup should use Alembic migrations instead of
+    relying on SQLAlchemy create_all().
+    """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

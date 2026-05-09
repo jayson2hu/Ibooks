@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
+const ADMIN_ROLES = ['admin', 'moderator'];
+
 /**
- * Hook to protect admin routes - redirects to login if not authenticated
+ * Hook to protect admin routes - redirects to login if not authenticated.
  */
 export function useAdminAuth() {
     const router = useRouter();
@@ -18,20 +20,16 @@ export function useAdminAuth() {
             return;
         }
 
-        // Check for token in localStorage
         const token = localStorage.getItem('token');
-        console.log('useAdminAuth check - pathname:', pathname, 'token exists:', !!token);
+        const role = localStorage.getItem('user_role');
 
-        if (!token) {
-            // No token, redirect to admin login
-            console.log('No token found, redirecting to login');
+        if (!token || !ADMIN_ROLES.includes(role ?? '')) {
             setIsAuthenticated(false);
             router.replace('/admin/login');
-        } else {
-            // Token exists, mark as authenticated
-            console.log('Token found, user authenticated');
-            setIsAuthenticated(true);
+            return;
         }
+
+        setIsAuthenticated(true);
     }, [router, pathname]);
 
     return { isAuthenticated, isLoading: isAuthenticated === null };

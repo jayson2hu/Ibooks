@@ -6,14 +6,17 @@ import { api } from '@/lib/api';
 export default function ContactManagement() {
     const [contacts, setContacts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [updatingId, setUpdatingId] = useState<number | null>(null);
 
     const fetchContacts = async () => {
         setLoading(true);
+        setError('');
         try {
-            const response = await api.contacts.list(false); // false = include inactive
+            const response = await api.contacts.adminList();
             setContacts(response.data || []);
-        } catch (error) {
-            console.error('Failed to fetch contacts:', error);
+        } catch (err: any) {
+            setError(err.response?.data?.detail || '无法加载联系方式');
         } finally {
             setLoading(false);
         }
@@ -24,14 +27,30 @@ export default function ContactManagement() {
     }, []);
 
     const toggleStatus = async (id: number, currentStatus: boolean) => {
-        // TODO: Implement update API
-        alert('功能开发中：切换状态');
+        setUpdatingId(id);
+        setError('');
+        try {
+            const response = await api.contacts.update(id, { is_active: !currentStatus });
+            setContacts((prev) => prev.map((contact) => contact.id === id ? response.data : contact));
+        } catch (err: any) {
+            setError(err.response?.data?.detail || '状态更新失败');
+        } finally {
+            setUpdatingId(null);
+        }
     };
 
     const handleDelete = async (id: number) => {
         if (!confirm('确定删除此联系方式吗？')) return;
-        // TODO: Implement delete API
-        alert('功能开发中：删除');
+        setUpdatingId(id);
+        setError('');
+        try {
+            await api.contacts.delete(id);
+            setContacts((prev) => prev.filter((contact) => contact.id !== id));
+        } catch (err: any) {
+            setError(err.response?.data?.detail || '删除失败');
+        } finally {
+            setUpdatingId(null);
+        }
     };
 
     return (
@@ -42,6 +61,12 @@ export default function ContactManagement() {
                     + 添加联系方式
                 </button>
             </div>
+
+            {error && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {loading ? (
@@ -54,14 +79,16 @@ export default function ContactManagement() {
                             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
                                     onClick={() => toggleStatus(contact.id, contact.is_active)}
+                                    disabled={updatingId === contact.id}
                                     className={`p-1 rounded ${contact.is_active ? 'text-green-600 bg-green-50' : 'text-gray-400 bg-gray-100'}`}
                                     title={contact.is_active ? "已启用" : "已禁用"}
                                 >
-                                    {contact.is_active ? '✅' : '🚫'}
+                                    {updatingId === contact.id ? '…' : contact.is_active ? '✅' : '🚫'}
                                 </button>
                                 <button className="p-1 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" title="编辑">✏️</button>
                                 <button
                                     onClick={() => handleDelete(contact.id)}
+                                    disabled={updatingId === contact.id}
                                     className="p-1 text-red-600 bg-red-50 rounded hover:bg-red-100"
                                     title="删除"
                                 >

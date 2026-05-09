@@ -28,6 +28,7 @@ class Resource(Base):
     
     # Pricing
     price: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0, nullable=False)
+    coin_price: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     original_price: Mapped[float | None] = mapped_column(Numeric(10, 2))  # For showing discounts
     is_free: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     

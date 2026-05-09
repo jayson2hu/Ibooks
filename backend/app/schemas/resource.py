@@ -15,6 +15,7 @@ class ResourceBase(BaseModel):
     category_id: Optional[int] = None
     tags: List[str] = Field(default_factory=list)
     price: Decimal = Field(default=Decimal("0.00"), ge=0)
+    coin_price: int = Field(default=0, ge=0)
     original_price: Optional[Decimal] = Field(None, ge=0)
     is_free: bool = False
     file_size: Optional[str] = None
@@ -71,10 +72,7 @@ class ResourceResponse(ResourceBase):
 
 
 class ResourceDetailResponse(ResourceResponse):
-    """Schema for detailed resource response (includes cloud link)."""
-    cloud_link: Optional[str] = None
-    access_code: Optional[str] = None
-    backup_links: List[str] = Field(default_factory=list)
+    """Schema for public resource details."""
     preview_images: List[str] = Field(default_factory=list)
 
 

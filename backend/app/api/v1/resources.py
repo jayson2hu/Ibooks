@@ -18,6 +18,7 @@ from app.schemas.resource import (
 from app.schemas.common import Message
 from app.models.resource import Resource
 from app.models.user import User
+from app.models.order import Order, OrderStatus
 from app.utils.seo import generate_slug
 from datetime import datetime
 
@@ -122,6 +123,57 @@ async def get_resource(
     await db.commit()
     
     return resource
+
+
+@router.get("/{slug}/access")
+async def get_resource_access(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user)
+):
+    """
+    Get cloud-drive access details for a resource.
+
+    Free resources are returned directly. Paid resources are blocked until the
+    order system is implemented in F07.
+    """
+    result = await db.execute(select(Resource).where(Resource.slug == slug))
+    resource = result.scalar_one_or_none()
+
+    if not resource or not resource.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="资源不存在"
+        )
+
+    if not resource.is_free:
+        if current_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="请先登录"
+            )
+
+        order_result = await db.execute(
+            select(Order).where(
+                Order.user_id == current_user.id,
+                Order.resource_id == resource.id,
+                Order.status == OrderStatus.PAID
+            )
+        )
+        if not order_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="请先购买该资源"
+            )
+
+    resource.download_count += 1
+    await db.commit()
+
+    return {
+        "cloud_link": resource.cloud_link,
+        "backup_links": resource.backup_links or [],
+        "access_code": resource.access_code,
+    }
 
 
 @router.post("", response_model=ResourceResponse, status_code=status.HTTP_201_CREATED)

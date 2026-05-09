@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     EMAIL_USERNAME: str = ""
     EMAIL_PASSWORD: str = ""
     EMAIL_USE_TLS: bool = True
+
+    # Alipay
+    ALIPAY_APP_ID: str = ""
+    ALIPAY_PRIVATE_KEY: str = ""
+    ALIPAY_PUBLIC_KEY: str = ""
+    ALIPAY_SANDBOX: bool = True
     
     # File Upload
     MAX_UPLOAD_SIZE: int = 10485760  # 10MB

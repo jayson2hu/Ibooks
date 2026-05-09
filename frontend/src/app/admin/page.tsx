@@ -17,20 +17,32 @@ interface Stats {
     total_downloads: number;
 }
 
+interface RecentResource {
+    id: number;
+    title: string;
+    resource_type?: string | null;
+    created_at: string;
+    is_published: boolean;
+}
+
 export default function AdminDashboard() {
     const { isAuthenticated, isLoading: isAuthLoading } = useAdminAuth();
     const [stats, setStats] = useState<Stats | null>(null);
+    const [recentResources, setRecentResources] = useState<RecentResource[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchStats = async () => {
+    const fetchDashboard = async () => {
         try {
             setIsLoading(true);
             setError(null);
-            const response = await api.admin.getStats();
-            setStats(response.data);
+            const [statsResponse, resourcesResponse] = await Promise.all([
+                api.admin.getStats(),
+                api.resources.list({ page: 1, page_size: 5 }),
+            ]);
+            setStats(statsResponse.data);
+            setRecentResources(resourcesResponse.data?.items || []);
         } catch (err: any) {
-            console.error('Failed to fetch stats:', err);
             setError(err.response?.data?.detail || '无法加载统计数据，请稍后重试');
         } finally {
             setIsLoading(false);
@@ -40,7 +52,7 @@ export default function AdminDashboard() {
     useEffect(() => {
         // Only fetch stats if authenticated
         if (isAuthenticated) {
-            fetchStats();
+            fetchDashboard();
         }
     }, [isAuthenticated]);
 
@@ -85,14 +97,6 @@ export default function AdminDashboard() {
         },
     ] : [];
 
-
-    const recentResources = [
-        { id: 1, title: 'Python 完全指南 2025', type: '电子书', date: '2025-12-01', status: '已发布' },
-        { id: 2, title: 'React 高级教程', type: '视频课程', date: '2025-12-01', status: '已发布' },
-        { id: 3, title: 'Next.js 14 实战', type: '文档', date: '2025-11-30', status: '待审核' },
-        { id: 4, title: 'TypeScript 深入浅出', type: '电子书', date: '2025-11-30', status: '已发布' },
-    ];
-
     const recentOrders = [
         { id: 1001, user: '张三', resource: 'Python 完全指南', amount: '¥99', status: '已完成' },
         { id: 1002, user: '李四', resource: 'React 高级教程', amount: '¥199', status: '已完成' },
@@ -117,7 +121,7 @@ export default function AdminDashboard() {
                     <StatsSkeleton />
                 </div>
             ) : error ? (
-                <ErrorMessage message={error} onRetry={fetchStats} />
+                <ErrorMessage message={error} onRetry={fetchDashboard} />
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {statsCards.map((stat, index) => (
@@ -138,22 +142,28 @@ export default function AdminDashboard() {
                     </div>
                     <div className="p-6">
                         <div className="space-y-4">
-                            {recentResources.map((resource) => (
-                                <div key={resource.id} className="flex items-center justify-between">
-                                    <div className="flex-1">
-                                        <h3 className="text-sm font-medium text-gray-900">{resource.title}</h3>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            {resource.type} • {resource.date}
-                                        </p>
+                            {isLoading ? (
+                                <div className="py-4 text-sm text-gray-500">加载中...</div>
+                            ) : recentResources.length === 0 ? (
+                                <div className="py-4 text-sm text-gray-500">暂无资源</div>
+                            ) : (
+                                recentResources.map((resource) => (
+                                    <div key={resource.id} className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                            <h3 className="text-sm font-medium text-gray-900">{resource.title}</h3>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {resource.resource_type || '资源'} • {new Date(resource.created_at).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                        <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${resource.is_published
+                                            ? 'bg-green-100 text-green-700'
+                                            : 'bg-yellow-100 text-yellow-700'
+                                            }`}>
+                                            {resource.is_published ? '已发布' : '待审核'}
+                                        </span>
                                     </div>
-                                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${resource.status === '已发布'
-                                        ? 'bg-green-100 text-green-700'
-                                        : 'bg-yellow-100 text-yellow-700'
-                                        }`}>
-                                        {resource.status}
-                                    </span>
-                                </div>
-                            ))}
+                                ))
+                            )}
                         </div>
                     </div>
                 </div>

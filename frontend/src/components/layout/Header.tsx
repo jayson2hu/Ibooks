@@ -101,6 +101,20 @@ export default function Header() {
                         ) : isAuthenticated ? (
                             <div className="flex items-center gap-4">
                                 <Link
+                                    href="/wallet"
+                                    className={`font-medium text-sm tracking-wide transition-colors ${isScrolled ? 'text-gray-600 hover:text-blue-600' : 'text-white/90 hover:text-white'
+                                        }`}
+                                >
+                                    我的钱包
+                                </Link>
+                                <Link
+                                    href="/orders"
+                                    className={`font-medium text-sm tracking-wide transition-colors ${isScrolled ? 'text-gray-600 hover:text-blue-600' : 'text-white/90 hover:text-white'
+                                        }`}
+                                >
+                                    我的订单
+                                </Link>
+                                <Link
                                     href="/admin"
                                     className={`font-medium text-sm tracking-wide transition-colors ${isScrolled ? 'text-gray-600 hover:text-blue-600' : 'text-white/90 hover:text-white'
                                         }`}
@@ -180,6 +194,50 @@ export default function Header() {
                                 {item.name}
                             </Link>
                         ))}
+                        {!isLoading && isAuthenticated && (
+                            <>
+                                <Link
+                                    href="/wallet"
+                                    className="block px-4 py-3 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium"
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                >
+                                    我的钱包
+                                </Link>
+                                <Link
+                                    href="/orders"
+                                    className="block px-4 py-3 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium"
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                >
+                                    我的订单
+                                </Link>
+                                <Link
+                                    href="/admin"
+                                    className="block px-4 py-3 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium"
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                >
+                                    管理后台
+                                </Link>
+                                <button
+                                    type="button"
+                                    className="block w-full px-4 py-3 text-left text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium"
+                                    onClick={() => {
+                                        logout();
+                                        setIsMobileMenuOpen(false);
+                                    }}
+                                >
+                                    退出
+                                </button>
+                            </>
+                        )}
+                        {!isLoading && !isAuthenticated && (
+                            <Link
+                                href="/login"
+                                className="block px-4 py-3 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                登录
+                            </Link>
+                        )}
                     </div>
                 </div>
             </div>

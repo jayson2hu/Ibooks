@@ -17,25 +17,19 @@ export default function AdminLoginPage() {
         setIsLoading(true);
 
         try {
-            console.log('Attempting login with:', email);
-            const response = await api.auth.login({ email, password });
-            console.log('Login response:', response);
+            const response = await api.auth.adminLogin({ email, password });
 
-            const { access_token } = response.data;
+            const { access_token, user } = response.data;
 
             if (!access_token) {
                 throw new Error('No access token received');
             }
 
-            // Store token in localStorage
             localStorage.setItem('token', access_token);
-            console.log('Token saved to localStorage');
+            localStorage.setItem('user_role', user.role);
 
-            // Redirect to admin dashboard
             window.location.href = '/admin';
         } catch (err: any) {
-            console.error('Login error:', err);
-            console.error('Error response:', err.response);
             const errorMessage = err.response?.data?.detail || err.message || '登录失败，请检查邮箱和密码';
             setError(errorMessage);
         } finally {

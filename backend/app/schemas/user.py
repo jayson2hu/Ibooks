@@ -51,6 +51,17 @@ class UserLogin(BaseModel):
     password: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Schema for requesting password reset."""
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Schema for resetting password with a token."""
+    token: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=8)
+
+
 class Token(BaseModel):
     """Schema for authentication token."""
     access_token: str

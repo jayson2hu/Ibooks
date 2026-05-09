@@ -72,13 +72,18 @@ docker-compose up -d
 - **前端网站**: http://localhost:3000
 - **后端 API**: http://localhost:8000
 - **API 文档**: http://localhost:8000/api/docs
-- **Grafana**: http://localhost:3000 (默认用户名/密码: admin/admin)
+- **Grafana**: http://localhost:3001 (默认用户名/密码: admin/admin)
 - **Prometheus**: http://localhost:9090
 
-### 4. 初始化数据库
+### 4. 数据库初始化
+
+Docker Compose 启动后端时会先执行 `alembic upgrade head`，自动创建/更新数据库表结构。
+
+如需手动执行迁移：
 
 ```bash
 docker-compose exec backend alembic upgrade head
+docker-compose exec backend alembic downgrade -1
 ```
 
 详细启动指南请查看 [QUICKSTART.md](QUICKSTART.md)
@@ -136,7 +141,7 @@ tail -f logs/backend/audit.log
 
 ### Grafana 仪表板
 
-访问 http://localhost:3000 查看:
+访问 http://localhost:3001 查看:
 - API 性能监控
 - 系统资源使用
 - 数据库状态
