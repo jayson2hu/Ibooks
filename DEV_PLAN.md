@@ -742,8 +742,10 @@ PUT /api/v1/admin/settings/signin
 4. 用户无法签到。
 
 **小功能自测**:
-- [ ] A/C/D 可在无第三方支付凭证环境完成。
+- [x] A/C/D 可在无第三方支付凭证环境完成。
 - [ ] B 需要支付宝沙箱凭证，缺失时记录为待外部条件。
+
+**小功能测试记录**: 2026-05-09，新增 `tests/test_e2e_coin_flow.py` 覆盖 A 签到领币购买资源、C 余额不足拒绝购买、D 后台调币/查看流水/关闭签到；运行 `conda run -n py311 python -m pytest tests/test_e2e_coin_flow.py -v`，结果 3 passed。B 场景依赖支付宝沙箱凭证，留到文档与外部条件记录。
 
 ### N08-T3：文档更新
 
