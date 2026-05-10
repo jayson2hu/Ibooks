@@ -1751,14 +1751,21 @@ if await r.get(f"blacklist:{token}"):
 
 前端登出时同时调用 `POST /auth/logout` 并清除 localStorage。
 
+**小功能自测**:
+- [x] `POST /auth/logout` 端点将 token 加入 Redis 黑名单。
+- [x] 登出后使用原 token 访问接口返回 401。
+- [x] 前端登出调用后端登出并清除本地 token。
+
+**小功能测试记录**: 2026-05-10，新增 Redis token 黑名单工具，`get_current_user` 拒绝黑名单 token，前端 `api.auth.logout()` 调用后端后清理 localStorage。运行 `conda run -n py311 python -m pytest tests/test_auth.py -v`，结果 11 passed；运行 `npx tsc --noEmit --incremental false`，结果通过。
+
 ### F10 验收标准
 
-- [ ] 注册接口同 IP 超频返回 429
-- [ ] 登录接口同 IP 超频返回 429
-- [ ] `POST /auth/refresh` 端点可用
-- [ ] `POST /auth/logout` 端点将 token 加入 Redis 黑名单
-- [ ] 登出后使用原 token 访问接口返回 401
-- [ ] 前端登出按钮调用后端登出并清除本地 token
+- [x] 注册接口同 IP 超频返回 429
+- [x] 登录接口同 IP 超频返回 429
+- [x] `POST /auth/refresh` 端点可用
+- [x] `POST /auth/logout` 端点将 token 加入 Redis 黑名单
+- [x] 登出后使用原 token 访问接口返回 401
+- [x] 前端登出按钮调用后端登出并清除本地 token
 - [ ] 更新本文档 F10 状态为 ✅
 
 **完成时间**: ___________

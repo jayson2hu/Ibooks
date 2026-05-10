@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from app.database import get_db
 from app.utils.security import decode_access_token
+from app.utils.token_blacklist import is_token_blacklisted
 from app.models.user import User, UserRole
 from app.schemas.user import TokenPayload
 from sqlalchemy import select
@@ -27,6 +28,13 @@ async def get_current_user(
         HTTPException: If token is invalid or user not found
     """
     token = credentials.credentials
+    if await is_token_blacklisted(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token 已失效，请重新登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     payload = decode_access_token(token)
     
     if payload is None:

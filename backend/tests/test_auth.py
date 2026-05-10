@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.main import app
 from app.database import AsyncSessionLocal
 from app.models.user import User, UserRole
+from app import dependencies
 from app.api.v1 import auth
 from app.services.wallet import get_or_create_wallet
 from app.utils.security import create_access_token
@@ -300,3 +301,49 @@ async def test_refresh_token_requires_authentication():
         response = await client.post("/api/v1/auth/refresh")
 
     assert response.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_logout_blacklists_current_token(monkeypatch):
+    """Logout stores the token in a blacklist and rejects later reuse."""
+    blacklisted_tokens: set[str] = set()
+
+    async def fake_blacklist_token(token: str, ttl_seconds: int) -> None:
+        assert ttl_seconds > 0
+        blacklisted_tokens.add(token)
+
+    async def fake_is_token_blacklisted(token: str) -> bool:
+        return token in blacklisted_tokens
+
+    monkeypatch.setattr(auth, "blacklist_token", fake_blacklist_token)
+    monkeypatch.setattr(dependencies, "is_token_blacklisted", fake_is_token_blacklisted)
+
+    async with AsyncSessionLocal() as session:
+        user = User(
+            email="logout@example.com",
+            username="logoutuser",
+            password_hash=get_password_hash("Test1234"),
+        )
+        session.add(user)
+        await session.flush()
+        await get_or_create_wallet(session, user.id)
+        await session.commit()
+        await session.refresh(user)
+        token = create_access_token(
+            data={"sub": user.id, "email": user.email, "role": user.role.value}
+        )
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        logout_response = await client.post(
+            "/api/v1/auth/logout",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        me_response = await client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert logout_response.status_code == 200
+    assert logout_response.json()["message"] == "已登出"
+    assert me_response.status_code == 401
+    assert me_response.json()["detail"] == "Token 已失效，请重新登录"

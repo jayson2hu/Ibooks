@@ -2,15 +2,18 @@
 Authentication endpoints.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
 import secrets
+import time
 import uuid
 import redis.asyncio as redis
 from app.database import get_db
 from app.config import settings
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, security
 from app.schemas.user import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
@@ -25,9 +28,11 @@ from app.utils.security import (
     verify_password,
     get_password_hash,
     create_access_token,
+    decode_access_token,
     validate_password_strength
 )
 from app.utils.rate_limit import check_rate_limit
+from app.utils.token_blacklist import blacklist_token
 from app.utils import email as email_utils
 from app.services.wallet import get_or_create_wallet
 
@@ -278,6 +283,26 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
         "token_type": "bearer",
         "user": current_user,
     }
+
+
+@router.post("/logout", response_model=Message)
+async def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    current_user: User = Depends(get_current_user),
+):
+    """Invalidate the current JWT access token."""
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    exp = payload.get("exp") if payload else None
+    ttl = max(int(exp or 0) - int(time.time()), 1)
+    try:
+        await blacklist_token(token, ttl)
+    except (RedisError, OSError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="登出服务暂不可用，请稍后再试",
+        )
+    return {"message": "已登出"}
 
 
 @router.get("/verify-email", response_model=Message)

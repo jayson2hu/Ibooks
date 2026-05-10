@@ -33,16 +33,16 @@ export function useAuth() {
         setIsLoading(false);
     };
 
-    const logout = () => {
-        localStorage.removeItem('token');
+    const logout = async () => {
+        await api.auth.logout();
         setIsAuthenticated(false);
         setUser(null);
         router.push('/login');
         router.refresh();
     };
 
-    const adminLogout = () => {
-        localStorage.removeItem('token');
+    const adminLogout = async () => {
+        await api.auth.logout();
         setIsAuthenticated(false);
         setUser(null);
         router.push('/admin/login');

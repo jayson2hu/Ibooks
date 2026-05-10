@@ -71,7 +71,17 @@ export const api = {
             apiClient.post('/auth/forgot-password', { email }),
         resetPassword: (token: string, password: string) =>
             apiClient.post('/auth/reset-password', { token, password }),
-        logout: () => {
+        logout: async () => {
+            try {
+                await apiClient.post('/auth/logout');
+            } finally {
+                if (typeof window !== 'undefined') {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user_role');
+                }
+            }
+        },
+        clearLocalAuth: () => {
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('token');
                 localStorage.removeItem('user_role');
