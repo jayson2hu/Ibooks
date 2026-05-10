@@ -1814,6 +1814,13 @@ scrape_configs:
           __path__: /var/log/backend/*.log
 ```
 
+**小功能自测**:
+- [x] `monitoring/promtail/promtail-config.yml` 存在。
+- [x] Promtail client 指向 Loki：`http://loki:3100/loki/api/v1/push`。
+- [x] backend 日志采集路径为 `/var/log/backend/*.log`。
+
+**小功能测试记录**: 2026-05-10，创建 Promtail 配置；运行 `test -f monitoring/promtail/promtail-config.yml` 和 `rg -n "http://loki:3100/loki/api/v1/push|/var/log/backend/\\*.log|job: ibooks_backend" monitoring/promtail/promtail-config.yml`，结果命中关键配置。
+
 ### F11-T3：创建 Grafana 数据源配置
 
 **新建文件**: `monitoring/grafana/provisioning/datasources/datasources.yml`
