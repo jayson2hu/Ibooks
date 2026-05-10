@@ -1783,6 +1783,12 @@ if await r.get(f"blacklist:{token}"):
 
 将 Grafana 端口从 3000 更正为 3001（与 docker-compose 实际配置一致）。
 
+**小功能自测**:
+- [x] README/QUICKSTART 中 Grafana 端口为 3001。
+- [x] README/QUICKSTART 中无 Grafana 3000 端口残留。
+
+**小功能测试记录**: 2026-05-10，运行 `rg -n "Grafana.*3000|Grafana \\| 3000|localhost:3000 \\(admin/admin\\)|localhost:3001|Grafana \\| 3001" README.md QUICKSTART.md`，仅命中 3001 说明。
+
 ### F11-T2：创建 Promtail 配置
 
 **新建文件**: `monitoring/promtail/promtail-config.yml`
