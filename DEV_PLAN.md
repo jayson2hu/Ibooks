@@ -756,8 +756,10 @@ PUT /api/v1/admin/settings/signin
 - `DEV_PLAN.md`：所有 N 任务状态、测试记录、遗留问题。
 
 **小功能自测**:
-- [ ] 文档中的 API 路径与实际代码一致。
-- [ ] 文档没有仍把支付宝描述为“直接购买资源”的主流程。
+- [x] 文档中的 API 路径与实际代码一致。
+- [x] 文档没有仍把支付宝描述为“直接购买资源”的主流程。
+
+**小功能测试记录**: 2026-05-09，更新 README/QUICKSTART/DEPLOYMENT，补充钱包、签到、充值、书币购买、后台资产管理 API 和支付宝充值环境变量；修正 QUICKSTART Grafana 端口为 3001；运行 `rg -n "直接购买|/api/v1/payments|/payments/alipay" README.md QUICKSTART.md DEPLOYMENT.md`，无结果。
 
 ### N08 大功能验收标准
 

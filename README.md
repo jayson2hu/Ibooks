@@ -7,6 +7,7 @@
 - ✅ **完整后端系统** - FastAPI + PostgreSQL + Redis
 - ✅ **现代化前端** - Next.js 14 + TypeScript + SSR/SSG
 - 🔐 **JWT 认证** - 安全的用户认证和授权
+- 💰 **站内币交易** - 支持钱包、签到奖励、充值套餐和书币购买资源
 - 📊 **性能监控** - Prometheus + Grafana 实时监控
 - 📝 **审计日志** - 完整的用户行为追踪
 - 🔍 **SEO 优化** - 自动生成 sitemap、RSS、静态页面、JSON-LD
@@ -100,6 +101,14 @@ docker-compose exec backend alembic downgrade -1
 - 邮箱注册登录
 - JWT Token 认证
 - 角色权限控制 (admin/user/moderator)
+- 邮箱验证与密码重置
+
+### 站内币与购买流程
+- 钱包余额与不可变书币流水
+- 每日签到按后台开关发放书币
+- 支付宝用于充值书币，不用于资源订单支付
+- 资源购买统一使用书币扣款
+- 免费资源或已购买资源可查看云盘链接
 
 ### 资源管理
 - CRUD 操作
@@ -222,6 +231,38 @@ LOG_FORMAT=json
 # SEO
 SITE_URL=https://your-domain.com
 SEO_AUTO_GENERATE=true
+
+# 支付宝充值（仅用于购买书币）
+ALIPAY_APP_ID=your-alipay-app-id
+ALIPAY_PRIVATE_KEY=your-private-key
+ALIPAY_PUBLIC_KEY=alipay-public-key
+ALIPAY_GATEWAY=https://openapi.alipaydev.com/gateway.do
+```
+
+## 💰 站内币 API 概览
+
+```text
+GET  /api/v1/wallet/me
+GET  /api/v1/wallet/ledger
+POST /api/v1/signin
+GET  /api/v1/recharge/packages
+POST /api/v1/recharge/orders
+POST /api/v1/recharge/alipay/create
+POST /api/v1/orders
+GET  /api/v1/resources/{slug}/access
+```
+
+后台资产管理：
+
+```text
+GET  /api/v1/admin/wallets
+GET  /api/v1/admin/coin-ledger
+POST /api/v1/admin/wallets/{user_id}/adjust
+GET  /api/v1/admin/recharge-orders
+GET  /api/v1/admin/recharge-packages
+POST /api/v1/admin/recharge-packages
+PATCH /api/v1/admin/recharge-packages/{id}
+PUT  /api/v1/admin/settings/signin
 ```
 
 ## 📝 项目完成度
@@ -254,11 +295,11 @@ SEO_AUTO_GENERATE=true
 ## 📱 下一步
 
 可选的扩展开发:
-- [ ] 前端展示网站 (Next.js)
-- [ ] 管理后台 (React/Vue)
 - [ ] 移动端 APP
 - [ ] AI 功能集成
-- [ ] 支付系统
+- [ ] 微信充值渠道
+- [ ] 支付宝沙箱真实联调
+- [ ] 前端测试覆盖
 
 ## 📄 许可证
 

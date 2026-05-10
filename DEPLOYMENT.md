@@ -32,6 +32,9 @@ For local debugging, we use SQLite to avoid the overhead of running a full Postg
    
    # Redis (Optional, can disable in code or run via Docker)
    REDIS_URL=redis://localhost:6379
+
+   # Site URL used in email links and payment callbacks
+   SITE_URL=http://localhost:3000
    ```
 
 3. **Run Database Migrations**:
@@ -70,7 +73,38 @@ Ensure your `.env` file (or environment variables) is configured for PostgreSQL:
 ```ini
 # Database (PostgreSQL)
 DATABASE_URL=postgresql+asyncpg://admin:${DB_PASSWORD}@postgres/resource_marketplace
+
+# Public site URL. Payment callbacks append /api/v1/... paths from this value.
+SITE_URL=https://your-domain.com
 ```
+
+### Coin Recharge Payment Configuration
+
+Resources are purchased with internal coins. Third-party payment channels are only used to recharge coins.
+
+For Alipay recharge, configure:
+
+```ini
+ALIPAY_APP_ID=your-alipay-app-id
+ALIPAY_PRIVATE_KEY=your-rsa-private-key
+ALIPAY_PUBLIC_KEY=alipay-rsa-public-key
+ALIPAY_GATEWAY=https://openapi.alipay.com/gateway.do
+```
+
+For sandbox testing, use:
+
+```ini
+ALIPAY_GATEWAY=https://openapi.alipaydev.com/gateway.do
+```
+
+The active recharge endpoints are:
+
+```text
+POST /api/v1/recharge/alipay/create
+POST /api/v1/recharge/alipay/notify
+```
+
+Legacy resource-order payment endpoints are intentionally not exposed.
 
 ### Running with Docker Compose
 ```bash

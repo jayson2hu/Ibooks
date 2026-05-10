@@ -16,7 +16,7 @@ cd d:/vscodefile/ibooks
 
 # 2. 配置环境变量
 cp .env.example .env
-# 编辑 .env 设置数据库密码和JWT密钥
+# 编辑 .env 设置数据库密码、JWT密钥和可选支付宝充值参数
 
 # 3. 启动所有服务
 docker-compose up -d
@@ -27,7 +27,7 @@ docker-compose exec backend alembic upgrade head
 # 5. 访问服务
 # 前端网站: http://localhost:3000
 # 后端API文档: http://localhost:8000/api/docs
-# Grafana监控: http://localhost:3000 (admin/admin)
+# Grafana监控: http://localhost:3001 (admin/admin)
 ```
 
 ### 方式二：本地开发
@@ -74,7 +74,7 @@ npm run dev
 | PostgreSQL | 5432 | 数据库 |
 | Redis | 6379 | 缓存 |
 | Prometheus | 9090 | 指标收集 |
-| Grafana | 3000 | 监控仪表板 |
+| Grafana | 3001 | 监控仪表板 |
 | Loki | 3100 | 日志聚合 |
 
 ## 🔧 常用命令
@@ -118,6 +118,60 @@ docker-compose exec backend alembic downgrade -1
 # 生成所有SEO文件（需要管理员Token）
 curl -X POST "http://localhost:8000/api/v1/seo/generate-all" \
   -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### 站内币主流程调试
+
+```bash
+# 查看钱包
+curl "http://localhost:8000/api/v1/wallet/me" \
+  -H "Authorization: Bearer USER_TOKEN"
+
+# 签到领取书币（需后台开启签到）
+curl -X POST "http://localhost:8000/api/v1/signin" \
+  -H "Authorization: Bearer USER_TOKEN"
+
+# 查看充值套餐
+curl "http://localhost:8000/api/v1/recharge/packages" \
+  -H "Authorization: Bearer USER_TOKEN"
+
+# 创建充值订单
+curl -X POST "http://localhost:8000/api/v1/recharge/orders" \
+  -H "Authorization: Bearer USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"package_id": 1, "payment_method": "alipay"}'
+
+# 创建支付宝充值链接（需要支付宝沙箱或正式凭证）
+curl -X POST "http://localhost:8000/api/v1/recharge/alipay/create" \
+  -H "Authorization: Bearer USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"recharge_no": "RCH..."}'
+
+# 使用书币购买资源，成功后订单直接 paid
+curl -X POST "http://localhost:8000/api/v1/orders" \
+  -H "Authorization: Bearer USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"resource_id": 1}'
+```
+
+### 后台资产管理
+
+```bash
+# 管理员调整用户余额
+curl -X POST "http://localhost:8000/api/v1/admin/wallets/USER_ID/adjust" \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"amount": 10, "description": "测试加币"}'
+
+# 查看资产流水
+curl "http://localhost:8000/api/v1/admin/coin-ledger?user_id=USER_ID" \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+
+# 开启签到并设置奖励
+curl -X PUT "http://localhost:8000/api/v1/admin/settings/signin" \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "reward_coins": 5}'
 ```
 
 ## 📝 首次使用
