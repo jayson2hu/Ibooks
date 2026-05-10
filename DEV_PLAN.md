@@ -1840,6 +1840,13 @@ datasources:
     url: http://loki:3100
 ```
 
+**小功能自测**:
+- [x] `monitoring/grafana/provisioning/datasources/datasources.yml` 存在。
+- [x] Prometheus 数据源 URL 为 `http://prometheus:9090`。
+- [x] Loki 数据源 URL 为 `http://loki:3100`。
+
+**小功能测试记录**: 2026-05-10，创建 Grafana datasource provisioning；运行 `test -f monitoring/grafana/provisioning/datasources/datasources.yml` 和 `rg -n "type: prometheus|url: http://prometheus:9090|type: loki|url: http://loki:3100" monitoring/grafana/provisioning/datasources/datasources.yml`，结果命中关键配置。
+
 ### F11-T4：创建基础 Grafana Dashboard
 
 **新建文件**: `monitoring/grafana/provisioning/dashboards/dashboards.yml` + `monitoring/grafana/provisioning/dashboards/ibooks.json`
