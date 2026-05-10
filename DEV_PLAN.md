@@ -1691,6 +1691,13 @@ async def check_rate_limit(key: str, max_calls: int, window_seconds: int) -> boo
 
 在 `auth.py` `register` 和 `login` 端点中调用（登录每分钟 10 次，注册每分钟 3 次）。
 
+**小功能自测**:
+- [x] 注册接口同 IP 每分钟超过 3 次返回 429。
+- [x] 登录接口同 IP 每分钟超过 10 次返回 429。
+- [x] Redis 不可用时不阻断认证入口。
+
+**小功能测试记录**: 2026-05-10，新增 `backend/app/utils/rate_limit.py` 并接入 `auth.register`、`auth.login`、`auth.admin_login`；测试用 monkeypatch 模拟 Redis 计数。运行 `conda run -n py311 python -m pytest tests/test_auth.py -v`，结果 8 passed。
+
 ### F10-T2：Token 刷新端点
 
 **文件**: `backend/app/api/v1/auth.py`

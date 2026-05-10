@@ -1,7 +1,7 @@
 """
 Authentication endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
@@ -27,11 +27,32 @@ from app.utils.security import (
     create_access_token,
     validate_password_strength
 )
+from app.utils.rate_limit import check_rate_limit
 from app.utils import email as email_utils
 from app.services.wallet import get_or_create_wallet
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+def get_client_ip(request: Request) -> str:
+    """Return the best-effort client IP for rate limiting."""
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def enforce_auth_rate_limit(request: Request, action: str, max_calls: int) -> None:
+    """Reject excessive auth requests from the same client IP."""
+    client_ip = get_client_ip(request)
+    key = f"rate_limit:auth:{action}:{client_ip}"
+    allowed = await check_rate_limit(key, max_calls=max_calls, window_seconds=60)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="请求过于频繁，请稍后再试",
+        )
 
 
 def build_verify_email_body(token: str) -> str:
@@ -76,7 +97,11 @@ async def consume_password_reset_token(token: str) -> int | None:
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(
+    user_data: UserCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Register a new user.
     
@@ -84,6 +109,8 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     - **username**: Unique username
     - **password**: Strong password (min 8 chars, uppercase, lowercase, digit)
     """
+    await enforce_auth_rate_limit(request, "register", max_calls=3)
+
     # Validate password strength
     is_valid, error_message = validate_password_strength(user_data.password)
     if not is_valid:
@@ -134,12 +161,18 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(
+    credentials: UserLogin,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Login with email and password.
     
     Returns JWT access token.
     """
+    await enforce_auth_rate_limit(request, "login", max_calls=10)
+
     # Find user by email
     result = await db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
@@ -175,12 +208,18 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/admin/login", response_model=Token)
-async def admin_login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
+async def admin_login(
+    credentials: UserLogin,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Admin login with email and password.
 
     Only admin and moderator users can receive an admin token from this endpoint.
     """
+    await enforce_auth_rate_limit(request, "admin_login", max_calls=10)
+
     result = await db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 
