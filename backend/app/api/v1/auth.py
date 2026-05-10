@@ -263,6 +263,23 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.post("/refresh", response_model=Token)
+async def refresh_token(current_user: User = Depends(get_current_user)):
+    """Refresh the current user's JWT access token."""
+    access_token = create_access_token(
+        data={
+            "sub": current_user.id,
+            "email": current_user.email,
+            "role": current_user.role.value,
+        }
+    )
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": current_user,
+    }
+
+
 @router.get("/verify-email", response_model=Message)
 async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     """Verify a user's email address."""

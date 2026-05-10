@@ -8,6 +8,8 @@ from app.main import app
 from app.database import AsyncSessionLocal
 from app.models.user import User, UserRole
 from app.api.v1 import auth
+from app.services.wallet import get_or_create_wallet
+from app.utils.security import create_access_token
 from app.utils.security import get_password_hash
 
 
@@ -258,3 +260,43 @@ async def test_login_rate_limit_returns_429(monkeypatch):
 
     assert limited_response.status_code == 429
     assert limited_response.json()["detail"] == "请求过于频繁，请稍后再试"
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_returns_new_access_token():
+    """Authenticated users can refresh their access token."""
+    async with AsyncSessionLocal() as session:
+        user = User(
+            email="refresh@example.com",
+            username="refreshuser",
+            password_hash=get_password_hash("Test1234"),
+        )
+        session.add(user)
+        await session.flush()
+        await get_or_create_wallet(session, user.id)
+        await session.commit()
+        await session.refresh(user)
+        token = create_access_token(
+            data={"sub": user.id, "email": user.email, "role": user.role.value}
+        )
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["token_type"] == "bearer"
+    assert data["access_token"]
+    assert data["user"]["email"] == "refresh@example.com"
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_requires_authentication():
+    """Refresh endpoint rejects anonymous requests."""
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post("/api/v1/auth/refresh")
+
+    assert response.status_code in (401, 403)

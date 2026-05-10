@@ -1714,6 +1714,12 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
 
 前端在 Axios 拦截器中，若距 token 过期时间小于 1 小时，自动调用 `/auth/refresh` 刷新。
 
+**小功能自测**:
+- [x] `POST /auth/refresh` 端点可用。
+- [x] 未登录调用 refresh 被拒绝。
+
+**小功能测试记录**: 2026-05-10，新增 `POST /api/v1/auth/refresh`，使用当前用户签发新 JWT。运行 `conda run -n py311 python -m pytest tests/test_auth.py -v`，结果 10 passed。
+
 ### F10-T3：登出（Token 黑名单）
 
 **文件**: `backend/app/api/v1/auth.py`
