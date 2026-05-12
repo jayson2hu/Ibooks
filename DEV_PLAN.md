@@ -1978,6 +1978,19 @@ pip install fakeredis
 
 **小功能测试记录**: 2026-05-12，新增 `tests/test_faqs.py`。运行 `conda run -n py311 python -m pytest tests/test_faqs.py -v`，结果 5 passed。
 
+### F12-T7：Settings API 测试
+
+**小功能自测**:
+- [x] 公开设置只返回 `footer/general/appearance` 分类，并支持公开分类过滤。
+- [x] 私有分类设置不会通过公开列表或公开详情泄露。
+- [x] 普通用户访问 admin 设置列表、分组、更新、批量更新均返回 403。
+- [x] 管理员可查看全部设置和按分类分组设置。
+- [x] 管理员可更新已有设置，缺失 key 返回 404。
+- [x] 批量更新可更新已有设置并创建新设置，跳过无效项。
+- [x] 签到奖励币数设置要求正整数。
+
+**小功能测试记录**: 2026-05-12，新增 `tests/test_settings.py`。运行 `conda run -n py311 python -m pytest tests/test_settings.py -v`，结果 6 passed。
+
 ### F12 验收标准
 
 - [ ] 上表所有测试文件创建
