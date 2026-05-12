@@ -1966,6 +1966,18 @@ pip install fakeredis
 
 **小功能测试记录**: 2026-05-12，新增 `tests/test_contacts.py`。运行 `conda run -n py311 python -m pytest tests/test_contacts.py -v`，结果 5 passed。
 
+### F12-T6：FAQ API 测试
+
+**小功能自测**:
+- [x] 公开 FAQ 列表默认只返回启用项，并按 `category/display_order` 排序。
+- [x] FAQ 列表支持按 `category` 过滤。
+- [x] `active_only=false` 可返回未启用 FAQ。
+- [x] 公开 FAQ 详情支持按 ID 获取，缺失返回 404。
+- [x] 普通用户创建、更新、删除 FAQ 均返回 403。
+- [x] 管理员可创建、更新、删除 FAQ，缺失记录更新/删除返回 404。
+
+**小功能测试记录**: 2026-05-12，新增 `tests/test_faqs.py`。运行 `conda run -n py311 python -m pytest tests/test_faqs.py -v`，结果 5 passed。
+
 ### F12 验收标准
 
 - [ ] 上表所有测试文件创建
