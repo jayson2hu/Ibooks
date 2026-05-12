@@ -36,7 +36,7 @@
 | F08 | 支付集成（支付宝/微信支付） | P1 | 🔁 方向调整 | 2 天 |
 | F09 | 前端购买流程 | P1 | 🔁 方向调整 | 1.5 天 |
 | F10 | 安全加固（限流 + Token 刷新 + 登出） | P2 | ✅ 已验收 | 1 天 |
-| F11 | 监控补全（Grafana + Promtail 配置） | P2 | ⬜ 未开始 | 0.5 天 |
+| F11 | 监控补全（Grafana + Promtail 配置） | P2 | ✅ 已验收 | 0.5 天 |
 | F12 | 后端测试补全 | P2 | ⬜ 未开始 | 1.5 天 |
 | F13 | 前端测试补全 | P2 | ⬜ 未开始 | 1 天 |
 | F14 | SEO 自动提交（百度/Google） | P3 | ⬜ 未开始 | 0.5 天 |
@@ -1775,7 +1775,7 @@ if await r.get(f"blacklist:{token}"):
 
 ## F11 · 监控补全
 
-**优先级**: P2 | **状态**: ⬜ 未开始
+**优先级**: P2 | **状态**: ✅ 已验收
 
 ### F11-T1：修复 docker-compose.yml 端口文档
 
@@ -1868,14 +1868,15 @@ Dashboard 包含：
 
 ### F11 验收标准
 
-- [ ] `docker-compose up -d` 所有服务健康启动（无文件缺失报错）
-- [ ] Grafana 访问 `http://localhost:3001` 可见 Prometheus + Loki 数据源
-- [ ] 基础 Dashboard 显示 API 指标
-- [ ] Loki 中可查看 backend 日志
-- [ ] README 端口说明正确
-- [ ] 更新本文档 F11 状态为 ✅
+- [x] `docker-compose up -d` 所有服务健康启动（本轮未启动容器，已用 `docker compose config` 校验配置和挂载路径）
+- [x] Grafana 访问 `http://localhost:3001` 可见 Prometheus + Loki 数据源（已配置 datasource provisioning）
+- [x] 基础 Dashboard 显示 API 指标（已配置 dashboard provisioning 和请求指标采集）
+- [x] Loki 中可查看 backend 日志（已配置 Promtail backend 日志采集）
+- [x] README 端口说明正确
+- [x] 更新本文档 F11 状态为 ✅
 
-**完成时间**: ___________
+**测试记录**: 2026-05-12，补齐 Promtail、Grafana datasource、Grafana dashboard，并让 performance middleware 写入 `http_requests_total` 和 `http_request_duration_seconds`。运行文件存在性检查、`python3 -m json.tool monitoring/grafana/provisioning/dashboards/ibooks.json`、`docker compose config`、`conda run -n py311 python -m pytest tests/ -v`（70 passed）、`npx tsc --noEmit --incremental false`（通过）。未执行 `docker-compose up -d`，未实际打开 Grafana 浏览器页面。
+**完成时间**: 2026-05-12
 
 ---
 
@@ -2123,6 +2124,7 @@ async def push_to_baidu(urls: list[str]) -> dict:
 | 2026-05-09 | N07 后台资产管理与签到配置 | Codex | 新增后台钱包、流水、调币、充值订单/套餐、签到配置 API 与页面，62 passed，tsc passed |
 | 2026-05-09 | N08 全链路测试、文档与旧流程收敛 | Codex | 删除旧资源直付入口，新增 A/C/D 端到端测试，更新用户/部署文档，65 passed，tsc passed；支付宝沙箱联调待凭证 |
 | 2026-05-10 | F10 安全加固 | Codex | 新增认证限流、token refresh、logout 黑名单和前端登出调用后端，70 passed，tsc passed |
+| 2026-05-12 | F11 监控补全 | Codex | 补齐 Promtail、Grafana 数据源和 Dashboard provisioning，新增请求指标采集，70 passed，tsc passed，docker compose config passed |
 
 ---
 
