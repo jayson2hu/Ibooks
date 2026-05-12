@@ -1955,6 +1955,17 @@ pip install fakeredis
 
 **小功能测试记录**: 2026-05-12，新增 `tests/test_admin.py`。运行 `conda run -n py311 python -m pytest tests/test_admin.py -v`，结果 5 passed。
 
+### F12-T5：Contacts API 测试
+
+**小功能自测**:
+- [x] 公开联系人列表默认只返回启用项，并按 `display_order` 排序。
+- [x] `active_only=false` 可返回全部联系人。
+- [x] 公开联系人详情支持按 ID 获取，缺失返回 404。
+- [x] 普通用户创建、更新、删除联系人均返回 403。
+- [x] 管理员可创建、更新、删除联系人，缺失记录更新/删除返回 404。
+
+**小功能测试记录**: 2026-05-12，新增 `tests/test_contacts.py`。运行 `conda run -n py311 python -m pytest tests/test_contacts.py -v`，结果 5 passed。
+
 ### F12 验收标准
 
 - [ ] 上表所有测试文件创建
