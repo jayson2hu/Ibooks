@@ -2,8 +2,7 @@
 SEO management endpoints for generating sitemap, RSS, etc.
 """
 from fastapi import APIRouter, Depends, BackgroundTasks
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
+from app.database import AsyncSessionLocal
 from app.dependencies import get_current_admin
 from app.schemas.common import Message
 from app.static_generator import (
@@ -22,7 +21,6 @@ router = APIRouter(prefix="/seo", tags=["SEO"])
 @router.post("/generate-sitemap", response_model=Message)
 async def generate_sitemap(
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
     """
@@ -31,7 +29,8 @@ async def generate_sitemap(
     This is run in the background.
     """
     async def generate_task():
-        await save_sitemap(db)
+        async with AsyncSessionLocal() as db:
+            await save_sitemap(db)
     
     background_tasks.add_task(generate_task)
     
@@ -41,7 +40,6 @@ async def generate_sitemap(
 @router.post("/generate-rss", response_model=Message)
 async def generate_rss(
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
     """
@@ -50,7 +48,8 @@ async def generate_rss(
     This is run in the background.
     """
     async def generate_task():
-        await save_rss_feed(db)
+        async with AsyncSessionLocal() as db:
+            await save_rss_feed(db)
     
     background_tasks.add_task(generate_task)
     
@@ -69,7 +68,6 @@ async def generate_robots(
 @router.post("/generate-all", response_model=Message)
 async def generate_all(
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
     """
@@ -78,8 +76,9 @@ async def generate_all(
     This is run in the background.
     """
     async def generate_all_task():
-        await save_sitemap(db)
-        await save_rss_feed(db)
+        async with AsyncSessionLocal() as db:
+            await save_sitemap(db)
+            await save_rss_feed(db)
         save_robots_txt()
     
     background_tasks.add_task(generate_all_task)
@@ -90,7 +89,6 @@ async def generate_all(
 @router.post("/generate-static-pages", response_model=Message)
 async def generate_static_pages(
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
     """
@@ -99,26 +97,27 @@ async def generate_static_pages(
     This is run in the background.
     """
     async def generate_task():
-        # Get all published resources
-        result = await db.execute(
-            select(Resource).where(Resource.is_published == True)
-        )
-        resources = result.scalars().all()
-        
-        # Generate HTML for each resource
-        for resource in resources:
-            resource_data = {
-                'title': resource.title,
-                'slug': resource.slug,
-                'description': resource.description,
-                'excerpt': resource.excerpt,
-                'meta_title': resource.meta_title,
-                'meta_description': resource.meta_description,
-                'meta_keywords': resource.meta_keywords,
-                'cover_image_url': resource.cover_image_url,
-                'price': float(resource.price),
-            }
-            save_resource_html(resource_data)
+        async with AsyncSessionLocal() as db:
+            # Get all published resources
+            result = await db.execute(
+                select(Resource).where(Resource.is_published == True)
+            )
+            resources = result.scalars().all()
+            
+            # Generate HTML for each resource
+            for resource in resources:
+                resource_data = {
+                    'title': resource.title,
+                    'slug': resource.slug,
+                    'description': resource.description,
+                    'excerpt': resource.excerpt,
+                    'meta_title': resource.meta_title,
+                    'meta_description': resource.meta_description,
+                    'meta_keywords': resource.meta_keywords,
+                    'cover_image_url': resource.cover_image_url,
+                    'price': float(resource.price),
+                }
+                save_resource_html(resource_data)
     
     background_tasks.add_task(generate_task)
     

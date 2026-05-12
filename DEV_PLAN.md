@@ -2002,6 +2002,17 @@ pip install fakeredis
 
 **小功能测试记录**: 2026-05-12，新增 `tests/test_bulk_import.py`，修复 CSV 导入复用 Excel 解析导致 `.csv` 文件二次 `read_excel` 的问题。运行 `conda run -n py311 python -m pytest tests/test_bulk_import.py -v`，结果 4 passed。
 
+### F12-T9：SEO API 测试
+
+**小功能自测**:
+- [x] 普通用户调用 sitemap、robots、静态页生成接口返回 403。
+- [x] 管理员可启动 sitemap、RSS、全部 SEO 文件生成后台任务。
+- [x] 管理员可生成 `robots.txt`，内容包含 sitemap 和 API 禁止抓取规则。
+- [x] 静态页生成只处理已发布资源。
+- [x] SEO 后台任务使用独立 DB session，避免复用请求 session 导致连接泄漏。
+
+**小功能测试记录**: 2026-05-12，新增 `tests/test_seo.py`，修复 SEO 后台任务持有请求依赖注入 DB session 的连接生命周期问题。运行 `conda run -n py311 python -m pytest tests/test_seo.py -v`，结果 4 passed。
+
 ### F12 验收标准
 
 - [ ] 上表所有测试文件创建
