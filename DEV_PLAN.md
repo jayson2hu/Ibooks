@@ -1944,6 +1944,17 @@ pip install fakeredis
 
 **小功能测试记录**: 2026-05-12，新增 `tests/test_search.py`。运行 `conda run -n py311 python -m pytest tests/test_search.py -v`，结果 4 passed。
 
+### F12-T4：Admin API 测试
+
+**小功能自测**:
+- [x] 普通用户调用 admin 统计、用户列表、审计日志接口返回 403。
+- [x] 管理员统计接口返回用户、资源、已发布资源、分类、浏览量、下载量计数。
+- [x] 管理员可查看用户列表并更新用户角色/状态。
+- [x] 更新不存在用户返回 404。
+- [x] 审计日志支持 action、user_id 过滤和分页响应。
+
+**小功能测试记录**: 2026-05-12，新增 `tests/test_admin.py`。运行 `conda run -n py311 python -m pytest tests/test_admin.py -v`，结果 5 passed。
+
 ### F12 验收标准
 
 - [ ] 上表所有测试文件创建
