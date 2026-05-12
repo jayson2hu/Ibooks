@@ -1922,6 +1922,17 @@ pip install fakeredis
 
 **小功能测试记录**: 2026-05-12，新增 `tests/test_resources.py`，修复 `ResourceCreate` 缺少 `is_published/is_featured` 导致创建资源接口运行时异常的问题。运行 `conda run -n py311 python -m pytest tests/test_resources.py -v`，结果 5 passed。
 
+### F12-T2：分类 API 测试
+
+**小功能自测**:
+- [x] 分类列表默认只返回启用分类，`active_only=false` 返回全部。
+- [x] 分类树正确嵌套子分类。
+- [x] 可按 slug 获取分类，缺失返回 404。
+- [x] 普通用户创建分类返回 403。
+- [x] 管理员可创建、更新、删除分类。
+
+**小功能测试记录**: 2026-05-12，新增 `tests/test_categories.py`，修复分类树接口中 Pydantic 从 ORM relationship 触发异步 lazy load 的问题，改为手动构建 `CategoryTreeResponse`。运行 `conda run -n py311 python -m pytest tests/test_categories.py -v`，结果 5 passed。
+
 ### F12 验收标准
 
 - [ ] 上表所有测试文件创建

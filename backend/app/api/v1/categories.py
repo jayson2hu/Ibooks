@@ -59,24 +59,29 @@ async def get_category_tree(
     result = await db.execute(query)
     all_categories = result.scalars().all()
     
-    # Build tree structure
-    category_dict = {cat.id: cat for cat in all_categories}
-    tree = []
-    
+    children_by_parent: dict[int | None, list[Category]] = {}
     for category in all_categories:
-        if category.parent_id is None:
-            # Root category
-            category_response = CategoryTreeResponse.model_validate(category)
-            tree.append(category_response)
-        else:
-            # Child category - add to parent's children
-            parent = category_dict.get(category.parent_id)
-            if parent:
-                if not hasattr(parent, '_children'):
-                    parent._children = []
-                parent._children.append(CategoryTreeResponse.model_validate(category))
-    
-    return tree
+        children_by_parent.setdefault(category.parent_id, []).append(category)
+
+    def build_node(category: Category) -> CategoryTreeResponse:
+        node = CategoryTreeResponse(
+            id=category.id,
+            name=category.name,
+            slug=category.slug,
+            description=category.description,
+            parent_id=category.parent_id,
+            icon=category.icon,
+            color=category.color,
+            cover_image_url=category.cover_image_url,
+            is_active=category.is_active,
+            sort_order=category.sort_order,
+            resource_count=category.resource_count,
+            created_at=category.created_at,
+            children=[build_node(child) for child in children_by_parent.get(category.id, [])],
+        )
+        return node
+
+    return [build_node(category) for category in children_by_parent.get(None, [])]
 
 
 @router.get("/{slug}", response_model=CategoryResponse)
