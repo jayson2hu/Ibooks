@@ -1933,6 +1933,17 @@ pip install fakeredis
 
 **小功能测试记录**: 2026-05-12，新增 `tests/test_categories.py`，修复分类树接口中 Pydantic 从 ORM relationship 触发异步 lazy load 的问题，改为手动构建 `CategoryTreeResponse`。运行 `conda run -n py311 python -m pytest tests/test_categories.py -v`，结果 5 passed。
 
+### F12-T3：搜索 API 测试
+
+**小功能自测**:
+- [x] 搜索匹配标题、描述、摘要、meta keywords。
+- [x] 搜索只返回已发布资源。
+- [x] 搜索结果按浏览量排序并支持分页。
+- [x] 无结果返回空分页。
+- [x] 空关键词返回 422。
+
+**小功能测试记录**: 2026-05-12，新增 `tests/test_search.py`。运行 `conda run -n py311 python -m pytest tests/test_search.py -v`，结果 4 passed。
+
 ### F12 验收标准
 
 - [ ] 上表所有测试文件创建
