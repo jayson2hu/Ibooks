@@ -1991,6 +1991,17 @@ pip install fakeredis
 
 **小功能测试记录**: 2026-05-12，新增 `tests/test_settings.py`。运行 `conda run -n py311 python -m pytest tests/test_settings.py -v`，结果 6 passed。
 
+### F12-T8：Bulk Import API 测试
+
+**小功能自测**:
+- [x] 普通用户调用批量导入和模板下载接口返回 403。
+- [x] 批量导入拒绝非 `.xlsx/.xls/.csv` 文件。
+- [x] 管理员可通过 CSV 批量导入资源，成功/失败统计正确。
+- [x] CSV 导入可关联已有分类、解析 tags、写入云盘字段，并清理临时文件。
+- [x] 管理员可下载批量导入 Excel 模板。
+
+**小功能测试记录**: 2026-05-12，新增 `tests/test_bulk_import.py`，修复 CSV 导入复用 Excel 解析导致 `.csv` 文件二次 `read_excel` 的问题。运行 `conda run -n py311 python -m pytest tests/test_bulk_import.py -v`，结果 4 passed。
+
 ### F12 验收标准
 
 - [ ] 上表所有测试文件创建

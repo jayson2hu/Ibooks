@@ -43,6 +43,15 @@ async def import_resources_from_excel(
     """
     # Read Excel file
     df = pd.read_excel(file_path)
+    return await import_resources_from_dataframe(df, db, category_mapping)
+
+
+async def import_resources_from_dataframe(
+    df: pd.DataFrame,
+    db: AsyncSession,
+    category_mapping: Dict[str, int] = None
+) -> Dict[str, Any]:
+    """Import resources from a normalized pandas DataFrame."""
     
     stats = {
         "total": len(df),
@@ -125,10 +134,7 @@ async def import_resources_from_csv(
     """
     # Read CSV file
     df = pd.read_csv(file_path)
-    
-    # Use same logic as Excel import
-    # (In production, you might want to refactor to avoid duplication)
-    return await import_resources_from_excel(file_path, db, category_mapping)
+    return await import_resources_from_dataframe(df, db, category_mapping)
 
 
 def create_import_template_excel(output_path: str):
