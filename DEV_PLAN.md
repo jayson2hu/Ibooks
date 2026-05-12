@@ -1911,6 +1911,17 @@ pip install fakeredis
 
 在 `conftest.py` 中添加 `fakeredis` fixture。
 
+### F12-T1：资源 API 测试
+
+**小功能自测**:
+- [x] 资源列表分页、分类过滤、关键词、免费/精选/resource_type 过滤。
+- [x] 资源详情增加浏览量且不泄露云盘字段。
+- [x] 普通用户创建资源返回 403。
+- [x] 管理员可创建、更新、删除资源。
+- [x] 创建资源 slug 冲突时自动生成唯一 slug。
+
+**小功能测试记录**: 2026-05-12，新增 `tests/test_resources.py`，修复 `ResourceCreate` 缺少 `is_published/is_featured` 导致创建资源接口运行时异常的问题。运行 `conda run -n py311 python -m pytest tests/test_resources.py -v`，结果 5 passed。
+
 ### F12 验收标准
 
 - [ ] 上表所有测试文件创建

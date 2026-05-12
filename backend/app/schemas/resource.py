@@ -28,6 +28,8 @@ class ResourceCreate(ResourceBase):
     """Schema for creating a resource."""
     cloud_link: Optional[str] = None
     access_code: Optional[str] = None
+    is_published: bool = True
+    is_featured: bool = False
     meta_title: Optional[str] = None
     meta_description: Optional[str] = None
     meta_keywords: Optional[str] = None
