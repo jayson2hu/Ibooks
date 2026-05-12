@@ -1,7 +1,6 @@
 """
 Bulk import functionality for resources from Excel/CSV files.
 """
-import pandas as pd
 from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.resource import Resource
@@ -41,17 +40,20 @@ async def import_resources_from_excel(
     Returns:
         Dictionary with import statistics
     """
+    import pandas as pd
+
     # Read Excel file
     df = pd.read_excel(file_path)
     return await import_resources_from_dataframe(df, db, category_mapping)
 
 
 async def import_resources_from_dataframe(
-    df: pd.DataFrame,
+    df: Any,
     db: AsyncSession,
     category_mapping: Dict[str, int] = None
 ) -> Dict[str, Any]:
     """Import resources from a normalized pandas DataFrame."""
+    import pandas as pd
     
     stats = {
         "total": len(df),
@@ -132,6 +134,8 @@ async def import_resources_from_csv(
     
     Same format as Excel import.
     """
+    import pandas as pd
+
     # Read CSV file
     df = pd.read_csv(file_path)
     return await import_resources_from_dataframe(df, db, category_mapping)
@@ -144,6 +148,8 @@ def create_import_template_excel(output_path: str):
     Args:
         output_path: Path to save the template
     """
+    import pandas as pd
+
     template_data = {
         'title': ['示例电子书标题', '示例课程标题'],
         'description': ['这是一本关于...的电子书', '这是一门关于...的课程'],

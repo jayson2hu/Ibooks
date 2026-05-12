@@ -2013,6 +2013,17 @@ pip install fakeredis
 
 **小功能测试记录**: 2026-05-12，新增 `tests/test_seo.py`，修复 SEO 后台任务持有请求依赖注入 DB session 的连接生命周期问题。运行 `conda run -n py311 python -m pytest tests/test_seo.py -v`，结果 4 passed。
 
+### F12-T10：后端测试 warning 清理
+
+**小功能自测**:
+- [x] 移除自定义 `event_loop` fixture，避免 pytest-asyncio 重定义 warning。
+- [x] FAQ response schema 改为 Pydantic v2 `ConfigDict`。
+- [x] bulk import 延迟导入 pandas，并修复 DataFrame helper 内部 `pd.isna` 引用。
+- [x] 对 passlib/pandas 第三方依赖内部弃用 warning 配置 pytest 过滤。
+- [x] 全量后端测试不再输出 pytest warning summary。
+
+**小功能测试记录**: 2026-05-12，运行 `conda run -n py311 python -m pytest tests/ -v`，结果 113 passed，无 warning summary。
+
 ### F12 验收标准
 
 - [ ] 上表所有测试文件创建

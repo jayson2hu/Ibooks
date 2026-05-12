@@ -1,7 +1,7 @@
 """
 FAQ schemas for API request/response validation.
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from typing import Optional
 
@@ -31,9 +31,8 @@ class FAQUpdate(BaseModel):
 
 class FAQResponse(FAQBase):
     """Schema for FAQ response."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime
     updated_at: datetime
-    
-    class Config:
-        from_attributes = True

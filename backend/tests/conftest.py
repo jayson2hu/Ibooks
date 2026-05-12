@@ -3,8 +3,6 @@ Test configuration and fixtures.
 """
 import os
 import pytest
-import asyncio
-from typing import Generator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 import pytest_asyncio
 
@@ -19,14 +17,6 @@ from app.database import Base, engine
 
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
-
-
-@pytest.fixture(scope="session")
-def event_loop() -> Generator:
-    """Create an event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.fixture(scope="function")
