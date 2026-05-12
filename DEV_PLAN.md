@@ -1858,6 +1858,14 @@ Dashboard 包含：
 - 错误率（4xx/5xx）
 - 最近日志（Loki）
 
+**小功能自测**:
+- [x] Grafana dashboard provider 配置存在。
+- [x] `ibooks.json` 是合法 JSON。
+- [x] Dashboard 包含请求量、平均响应时间、错误率、慢接口和 Loki 日志面板。
+- [x] 后端性能中间件写入 `http_requests_total` 和 `http_request_duration_seconds`。
+
+**小功能测试记录**: 2026-05-10，创建 `dashboards.yml` 和 `ibooks.json`，并在 performance middleware 中写入 Prometheus 请求指标。运行 `python3 -m json.tool monitoring/grafana/provisioning/dashboards/ibooks.json >/tmp/ibooks-dashboard.json`，结果通过；运行 `rg -n "http_requests_total|http_request_duration_seconds|ibooks_backend|Recent Backend Logs|API Request Rate" monitoring/grafana/provisioning/dashboards/ibooks.json backend/app/middleware/performance.py`，结果命中关键配置；运行 `conda run -n py311 python -m pytest tests/test_auth.py -v`，结果 11 passed。
+
 ### F11 验收标准
 
 - [ ] `docker-compose up -d` 所有服务健康启动（无文件缺失报错）

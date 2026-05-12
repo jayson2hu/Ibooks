@@ -8,6 +8,7 @@ from typing import Callable
 import time
 from app.config import settings
 from app.utils.logging import performance_logger
+from app.utils.metrics import request_count, request_duration
 
 
 class PerformanceMiddleware(BaseHTTPMiddleware):
@@ -44,6 +45,16 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
         
         # Add to response headers (for debugging)
         response.headers["X-Response-Time"] = f"{duration_ms}ms"
+
+        request_count.labels(
+            method=request.method,
+            endpoint=request.url.path,
+            status=str(response.status_code),
+        ).inc()
+        request_duration.labels(
+            method=request.method,
+            endpoint=request.url.path,
+        ).observe(duration)
         
         # Log performance
         if duration_ms > self.slow_threshold_ms:
