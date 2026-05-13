@@ -96,6 +96,11 @@ def _run_startup_migrations(sync_conn) -> None:
 
     if "resources" in table_names:
         existing_columns = {column["name"] for column in inspector.get_columns("resources")}
+        if "coin_price" not in existing_columns:
+            sync_conn.exec_driver_sql(
+                "ALTER TABLE resources ADD COLUMN coin_price INTEGER NOT NULL DEFAULT 0"
+            )
+
         for column_name in (
             "source_type",
             "source_site",
@@ -109,6 +114,13 @@ def _run_startup_migrations(sync_conn) -> None:
             column = Resource.__table__.c[column_name]
             column_sql = str(CreateColumn(column).compile(dialect=sync_conn.dialect))
             sync_conn.exec_driver_sql(f"ALTER TABLE resources ADD COLUMN {column_sql}")
+
+    if "orders" in table_names:
+        existing_columns = {column["name"] for column in inspector.get_columns("orders")}
+        if "coin_amount" not in existing_columns:
+            sync_conn.exec_driver_sql(
+                "ALTER TABLE orders ADD COLUMN coin_amount INTEGER NOT NULL DEFAULT 0"
+            )
 
     if "site_settings" in table_names:
         setting_keys = [item["key"] for item in CRAWLER_1024_DEFAULT_SETTINGS]

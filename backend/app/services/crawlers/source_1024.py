@@ -49,50 +49,50 @@ POST_ID_FROM_URL_PATTERN = re.compile(r"/(?P<post_id>\d+)\.html?$", re.IGNORECAS
 CRAWLER_FIELD_OPTIONS = [
     {
         "key": "title",
-        "label": "标题",
-        "description": "资源卡片主标题，用于生成资源名称�?,
+        "label": "Title",
+        "description": "Resource title parsed from the listing card.",
         "required": True,
     },
     {
         "key": "source_url",
-        "label": "原文链接",
-        "description": "源站详情页地址，用于去重和回溯来源�?,
+        "label": "Source URL",
+        "description": "Original detail page URL used for deduplication and traceability.",
         "required": True,
     },
     {
         "key": "external_id",
-        "label": "外部 ID",
-        "description": "从列表页�?URL 提取的唯一标识，用于增量同步去重�?,
+        "label": "External ID",
+        "description": "Stable identifier extracted from the listing URL.",
         "required": True,
     },
     {
         "key": "excerpt",
-        "label": "摘要",
-        "description": "列表页展示的简介，会同步到资源摘要与描述�?,
+        "label": "Excerpt",
+        "description": "Short description parsed from the listing page.",
         "required": False,
     },
     {
         "key": "cover_image_url",
-        "label": "封面�?,
-        "description": "列表页图片地址，用于前台资源卡片封面�?,
+        "label": "Cover Image",
+        "description": "Image URL parsed from the listing page.",
         "required": False,
     },
     {
         "key": "resource_type",
-        "label": "资源类型/栏目",
-        "description": "列表页分类标签，可同步为资源类型�?,
+        "label": "Resource Type",
+        "description": "Category label parsed from the listing page.",
         "required": False,
     },
     {
         "key": "external_published_at",
-        "label": "发布时间",
-        "description": "列表页时间字段，可同步为资源发布时间�?,
+        "label": "Published At",
+        "description": "Publication timestamp parsed from the listing page.",
         "required": False,
     },
     {
         "key": "tags",
-        "label": "标签",
-        "description": "由栏目名与来源标签组成，用于补充资源标签�?,
+        "label": "Tags",
+        "description": "Tags composed from source and category metadata.",
         "required": False,
     },
 ]
@@ -173,7 +173,7 @@ class Source1024Crawler:
             published_at = cls._parse_datetime(TIME_PATTERN.search(body))
             cover_image_url = cls._extract_image_url(body)
 
-            tags = ["1024资源�?, "外部补充"]
+            tags = ["1024 resources", "external source"]
             if category:
                 tags.insert(0, category)
 
@@ -184,7 +184,7 @@ class Source1024Crawler:
                     source_url=source_url,
                     excerpt=excerpt,
                     cover_image_url=cover_image_url,
-                    resource_type=category or "外部资源",
+                    resource_type=category or "external_resource",
                     external_published_at=published_at,
                     tags=list(dict.fromkeys(tags)),
                 )

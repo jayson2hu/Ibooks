@@ -109,7 +109,7 @@ class Source1024SyncService:
 
         finished_at = datetime.utcnow()
         total_count = imported_count + updated_count
-        message = f"新增 {imported_count} 条，更新 {updated_count} 条，跳过 {skipped_count} 条�?
+        message = f"Imported {imported_count}, updated {updated_count}, skipped {skipped_count}"
 
         return CrawlerRunResult(
             imported_count=imported_count,
@@ -260,7 +260,7 @@ class Source1024CrawlerManager:
     """Coordinates manual and scheduled runs for the 1024 crawler."""
 
     SOURCE_KEY = "crawler_1024"
-    SOURCE_NAME = "1024资源�?
+    SOURCE_NAME = "1024 resources"
     SOURCE_SITE = "1024zyz.com"
 
     def __init__(self) -> None:
@@ -311,7 +311,7 @@ class Source1024CrawlerManager:
             await self._update_runtime_status(
                 db,
                 status="running",
-                last_message=f"{trigger} 正在执行中�?,
+                last_message=f"{trigger} is running",
                 last_count=settings.last_count,
                 updated_by=updated_by,
             )
@@ -346,7 +346,7 @@ class Source1024CrawlerManager:
                 return result
             except Exception as exc:
                 await db.rollback()
-                error_message = f"{trigger} 执行失败: {exc}"
+                error_message = f"{trigger} failed: {exc}"
                 await self._update_runtime_status(
                     db,
                     status="failed",

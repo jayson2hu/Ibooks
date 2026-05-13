@@ -143,14 +143,14 @@ async def get_resource_access(
     if not resource or not resource.is_published:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="资源不存�?
+            detail="Resource not found"
         )
 
     if not resource.is_free:
         if current_user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="请先登录"
+                detail="Please log in before accessing this resource"
             )
 
         order_result = await db.execute(
@@ -163,7 +163,7 @@ async def get_resource_access(
         if not order_result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail="请先购买该资�?
+                detail="Please purchase this resource before accessing it"
             )
 
     resource.download_count += 1

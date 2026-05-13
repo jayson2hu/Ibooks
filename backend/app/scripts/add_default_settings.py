@@ -19,31 +19,31 @@ async def add_default_settings():
     default_settings = [
         {
             "key": "copyright_text",
-            "value": "©2016-2025 站内大部分资源收集于网络，若侵犯了您的合法权益，请联系我们删除！",
+            "value": "Copyright 2016-2025. Contact us for takedown requests.",
             "category": "footer",
             "description": "Footer copyright text"
         },
         {
             "key": "site_name",
-            "value": "资源市场",
+            "value": "Resource Marketplace",
             "category": "general",
             "description": "Website name"
         },
         {
             "key": "site_description",
-            "value": "提供优质的电子书、视频课程和技术文档，助力您的学习和成长�?,
+            "value": "Curated ebooks, courses, and technical documents for learning and growth.",
             "category": "general",
             "description": "Website description"
         },
         {
             "key": "site_keywords",
-            "value": "电子�?课程,文档,资源,学习",
+            "value": "ebooks,courses,documents,resources",
             "category": "seo",
             "description": "SEO keywords"
         },
         {
             "key": "footer_brand_text",
-            "value": "提供优质的电子书、视频课程和技术文档，助力您的学习和成长�?,
+            "value": "Curated digital resources for continuous learning.",
             "category": "footer",
             "description": "Footer brand description text"
         }
@@ -60,12 +60,12 @@ async def add_default_settings():
             if not existing:
                 setting = SiteSetting(**setting_data)
                 db.add(setting)
-                print(f"�?Added setting: {setting_data['key']}")
+                print(f"Added setting: {setting_data['key']}")
             else:
-                print(f"�?Setting already exists: {setting_data['key']}")
+                print(f"Setting already exists: {setting_data['key']}")
 
         await db.commit()
-        print("\n�?Default settings configured successfully!")
+        print("Default settings configured successfully!")
 
 
 if __name__ == "__main__":
