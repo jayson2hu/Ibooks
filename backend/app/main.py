@@ -2,10 +2,14 @@
 Main FastAPI application.
 """
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+import os
+
 from app.config import settings
 from app.database import init_db, close_db
+from app.services.crawler_service import crawler_scheduler
 from app.utils.logging import setup_logging
 from app.utils.metrics import metrics_endpoint
 from app.middleware import AuditMiddleware, PerformanceMiddleware, setup_cors
@@ -21,13 +25,17 @@ async def lifespan(app: FastAPI):
     # Startup
     setup_logging()
     await init_db()
-    print(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} started")
-    
+    if settings.CRAWLER_SCHEDULER_ENABLED:
+        crawler_scheduler.start()
+    print(f"[START] {settings.APP_NAME} v{settings.APP_VERSION} started")
+
     yield
-    
+
     # Shutdown
+    if settings.CRAWLER_SCHEDULER_ENABLED:
+        await crawler_scheduler.stop()
     await close_db()
-    print(f"👋 {settings.APP_NAME} shut down")
+    print(f"[STOP] {settings.APP_NAME} shut down")
 
 
 # Create FastAPI app
@@ -54,6 +62,35 @@ if settings.MONITOR_AUDIT:
 # Include API routers
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
+# Mount static files directory for SEO files
+static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static_pages')
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir)
+
+# Serve individual SEO files
+@app.get("/sitemap.xml")
+async def serve_sitemap():
+    """Serve sitemap.xml file."""
+    file_path = os.path.join(static_dir, 'sitemap.xml')
+    if os.path.exists(file_path):
+        return FileResponse(file_path, media_type='application/xml')
+    return {"detail": "Sitemap not found. Please generate it first."}
+
+@app.get("/rss.xml")
+async def serve_rss():
+    """Serve RSS feed file."""
+    file_path = os.path.join(static_dir, 'rss.xml')
+    if os.path.exists(file_path):
+        return FileResponse(file_path, media_type='application/xml')
+    return {"detail": "RSS feed not found. Please generate it first."}
+
+@app.get("/robots.txt")
+async def serve_robots():
+    """Serve robots.txt file."""
+    file_path = os.path.join(static_dir, 'robots.txt')
+    if os.path.exists(file_path):
+        return FileResponse(file_path, media_type='text/plain')
+    return {"detail": "Robots.txt not found. Please generate it first."}
 
 # Root endpoint
 @app.get("/", response_class=HTMLResponse)

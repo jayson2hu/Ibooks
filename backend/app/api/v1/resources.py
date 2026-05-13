@@ -39,7 +39,7 @@ async def list_resources(
 ):
     """
     List all published resources with pagination and filters.
-    
+
     - **page**: Page number (default: 1)
     - **page_size**: Items per page (default: 20, max: 100)
     - **category_id**: Filter by category
@@ -50,20 +50,20 @@ async def list_resources(
     """
     # Build query
     query = select(Resource).where(Resource.is_published == True)
-    
+
     # Apply filters
     if category_id:
         query = query.where(Resource.category_id == category_id)
-    
+
     if resource_type:
         query = query.where(Resource.resource_type == resource_type)
-    
+
     if is_featured is not None:
         query = query.where(Resource.is_featured == is_featured)
-    
+
     if is_free is not None:
         query = query.where(Resource.is_free == is_free)
-    
+
     if search:
         search_term = f"%{search}%"
         query = query.where(
@@ -73,20 +73,20 @@ async def list_resources(
                 Resource.excerpt.ilike(search_term)
             )
         )
-    
+
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
-    
+
     # Apply pagination
     query = query.offset((page - 1) * page_size).limit(page_size)
     query = query.order_by(Resource.sort_order.desc(), Resource.created_at.desc())
-    
+
     # Execute query
     result = await db.execute(query)
     resources = result.scalars().all()
-    
+
     return {
         "items": resources,
         "total": total,
@@ -104,24 +104,24 @@ async def get_resource(
 ):
     """
     Get resource details by slug.
-    
+
     Cloud links are only visible to authenticated users (or can be made public).
     """
     result = await db.execute(
         select(Resource).where(Resource.slug == slug, Resource.is_published == True)
     )
     resource = result.scalar_one_or_none()
-    
+
     if not resource:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Resource not found"
         )
-    
+
     # Increment view count
     resource.view_count += 1
     await db.commit()
-    
+
     return resource
 
 
@@ -143,7 +143,7 @@ async def get_resource_access(
     if not resource or not resource.is_published:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="资源不存在"
+            detail="资源不存�?
         )
 
     if not resource.is_free:
@@ -163,7 +163,7 @@ async def get_resource_access(
         if not order_result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail="请先购买该资源"
+                detail="请先购买该资�?
             )
 
     resource.download_count += 1
@@ -187,24 +187,25 @@ async def create_resource(
     """
     # Generate slug from title
     slug = generate_slug(resource_data.title)
-    
+
     # Check if slug already exists
     result = await db.execute(select(Resource).where(Resource.slug == slug))
     if result.scalar_one_or_none():
         # Add timestamp to make it unique
         slug = f"{slug}-{int(datetime.utcnow().timestamp())}"
-    
+
     # Create resource
     new_resource = Resource(
         **resource_data.model_dump(exclude_unset=True),
+        source_type="manual",
         slug=slug,
         published_at=datetime.utcnow() if resource_data.is_published else None
     )
-    
+
     db.add(new_resource)
     await db.commit()
     await db.refresh(new_resource)
-    
+
     return new_resource
 
 
@@ -220,28 +221,28 @@ async def update_resource(
     """
     result = await db.execute(select(Resource).where(Resource.id == resource_id))
     resource = result.scalar_one_or_none()
-    
+
     if not resource:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Resource not found"
         )
-    
+
     # Update fields
     update_data = resource_data.model_dump(exclude_unset=True)
-    
+
     # Update slug if title changed
     if "title" in update_data:
         new_slug = generate_slug(update_data["title"])
         if new_slug != resource.slug:
             update_data["slug"] = new_slug
-    
+
     for field, value in update_data.items():
         setattr(resource, field, value)
-    
+
     await db.commit()
     await db.refresh(resource)
-    
+
     return resource
 
 
@@ -256,14 +257,14 @@ async def delete_resource(
     """
     result = await db.execute(select(Resource).where(Resource.id == resource_id))
     resource = result.scalar_one_or_none()
-    
+
     if not resource:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Resource not found"
         )
-    
+
     await db.delete(resource)
     await db.commit()
-    
+
     return {"message": "Resource deleted successfully"}
