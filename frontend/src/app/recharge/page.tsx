@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
-import type { AlipayCreateResponse, RechargePackage } from '@/types';
+import { api, getApiErrorMessage } from '@/lib/api';
+import type { RechargePackage } from '@/types';
 
 function formatMoney(value: number | string) {
     return Number(value || 0).toFixed(2);
@@ -17,7 +17,7 @@ export default function RechargePage() {
     const [submittingId, setSubmittingId] = useState<number | null>(null);
     const [error, setError] = useState('');
 
-    const loadPackages = async () => {
+    const loadPackages = useCallback(async () => {
         setLoading(true);
         setError('');
         if (!localStorage.getItem('token')) {
@@ -28,27 +28,26 @@ export default function RechargePage() {
         try {
             const response = await api.recharge.packages();
             setPackages(response.data);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '充值套餐加载失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '充值套餐加载失败'));
         } finally {
             setLoading(false);
         }
-    };
+    }, [router]);
 
     useEffect(() => {
-        loadPackages();
-    }, []);
+        void loadPackages();
+    }, [loadPackages]);
 
     const startRecharge = async (packageId: number) => {
         setSubmittingId(packageId);
         setError('');
         try {
-            const orderResponse = await api.recharge.createOrder(packageId, 'alipay');
+            const orderResponse = await api.recharge.createOrder(packageId);
             const paymentResponse = await api.recharge.alipayCreate(orderResponse.data.recharge_no);
-            const payment = paymentResponse.data as AlipayCreateResponse;
-            window.location.href = payment.payment_url;
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '发起充值失败');
+            window.location.href = paymentResponse.data.payment_url;
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '发起充值失败'));
             setSubmittingId(null);
         }
     };

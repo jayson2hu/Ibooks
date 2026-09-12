@@ -1,6 +1,5 @@
 """Check for duplicate slugs in crawled data."""
 import asyncio
-import httpx
 import sys
 sys.path.insert(0, '.')
 

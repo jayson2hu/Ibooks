@@ -7,11 +7,24 @@ from sqlalchemy import select
 from app.main import app
 from app.database import AsyncSessionLocal
 from app.models.user import User, UserRole
+from app.models.site_settings import SiteSetting
 from app import dependencies
 from app.api.v1 import auth
 from app.services.wallet import get_or_create_wallet
-from app.utils.security import create_access_token
+from app.utils.security import create_access_token, decode_access_token
 from app.utils.security import get_password_hash
+
+
+def test_only_canonical_auth_routes_are_registered():
+    """Legacy auth modules must not reintroduce duplicate or stale HTTP contracts."""
+    route_paths = [route.path for route in app.routes]
+
+    assert route_paths.count("/api/v1/auth/login") == 1
+    assert route_paths.count("/api/v1/auth/admin/login") == 1
+    assert route_paths.count("/api/v1/auth/register") == 1
+    assert "/api/v1/auth/user/login" not in route_paths
+    assert "/api/v1/auth/user/register" not in route_paths
+    assert "/api/v1/auth/admin/me" not in route_paths
 
 
 @pytest.mark.asyncio
@@ -264,6 +277,127 @@ async def test_login_rate_limit_returns_429(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_registration_runtime_setting_disables_registration():
+    """Persisted registration setting is enforced at request time."""
+    async with AsyncSessionLocal() as session:
+        session.add(
+            SiteSetting(
+                key="user_registration_enabled",
+                value="false",
+                category="features",
+            )
+        )
+        await session.commit()
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "closed@example.com",
+                "username": "closeduser",
+                "password": "Test1234",
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "用户注册已关闭"
+
+
+@pytest.mark.asyncio
+async def test_login_runtime_settings_control_limit_and_session(monkeypatch):
+    """Persisted security settings drive limiter and access-token lifetime."""
+    observed_max_calls: list[int] = []
+
+    async def capture_limit(key: str, max_calls: int, window_seconds: int) -> bool:
+        observed_max_calls.append(max_calls)
+        return True
+
+    monkeypatch.setattr(auth, "check_rate_limit", capture_limit)
+    async with AsyncSessionLocal() as session:
+        session.add_all(
+            [
+                User(
+                    email="runtime-login@example.com",
+                    username="runtimelogin",
+                    password_hash=get_password_hash("Test1234"),
+                ),
+                SiteSetting(
+                    key="max_login_attempts",
+                    value="3",
+                    category="security",
+                ),
+                SiteSetting(
+                    key="session_timeout_minutes",
+                    value="15",
+                    category="security",
+                ),
+            ]
+        )
+        await session.commit()
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "runtime-login@example.com", "password": "Test1234"},
+        )
+
+    assert response.status_code == 200
+    assert observed_max_calls == [3]
+    payload = decode_access_token(response.json()["access_token"])
+    assert payload is not None
+    assert 895 <= payload["exp"] - payload["iat"] <= 905
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_ignores_untrusted_forwarded_for(monkeypatch):
+    """Clients cannot evade the limiter by spoofing proxy headers."""
+    observed_keys: list[str] = []
+
+    async def fake_check_rate_limit(
+        key: str,
+        max_calls: int,
+        window_seconds: int,
+    ) -> bool:
+        observed_keys.append(key)
+        return True
+
+    monkeypatch.setattr(auth, "check_rate_limit", fake_check_rate_limit)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/auth/login",
+            headers={"X-Forwarded-For": "203.0.113.99"},
+            json={"email": "missing@example.com", "password": "Wrong1234"},
+        )
+
+    assert response.status_code == 401
+    assert observed_keys == ["rate_limit:auth:login:127.0.0.1"]
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_backend_failure_returns_503(monkeypatch):
+    """Authentication does not silently lose brute-force protection."""
+
+    async def unavailable_rate_limit(
+        key: str,
+        max_calls: int,
+        window_seconds: int,
+    ) -> bool:
+        raise auth.RedisError("redis unavailable")
+
+    monkeypatch.setattr(auth, "check_rate_limit", unavailable_rate_limit)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "missing@example.com", "password": "Wrong1234"},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "认证保护服务暂不可用，请稍后再试"
+
+
+@pytest.mark.asyncio
 async def test_refresh_token_returns_new_access_token():
     """Authenticated users can refresh their access token."""
     async with AsyncSessionLocal() as session:
@@ -277,9 +411,7 @@ async def test_refresh_token_returns_new_access_token():
         await get_or_create_wallet(session, user.id)
         await session.commit()
         await session.refresh(user)
-        token = create_access_token(
-            data={"sub": user.id, "email": user.email, "role": user.role.value}
-        )
+        token = auth.create_session_refresh_token(user)
 
     async with AsyncClient(app=app, base_url="http://test") as client:
         response = await client.post(
@@ -291,7 +423,95 @@ async def test_refresh_token_returns_new_access_token():
     data = response.json()
     assert data["token_type"] == "bearer"
     assert data["access_token"]
+    assert data["refresh_token"]
+    assert decode_access_token(data["access_token"])["typ"] == "access"
+    assert decode_access_token(data["refresh_token"])["typ"] == "refresh"
     assert data["user"]["email"] == "refresh@example.com"
+
+
+@pytest.mark.asyncio
+async def test_refresh_endpoint_rejects_typed_access_token():
+    """New access tokens cannot be used as refresh credentials."""
+    async with AsyncSessionLocal() as session:
+        user = User(
+            email="access-not-refresh@example.com",
+            username="accessnotrefresh",
+            password_hash=get_password_hash("Test1234"),
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        token = auth.create_session_access_token(user, 30)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_cannot_authenticate_access_endpoint():
+    """Refresh credentials are not bearer access tokens."""
+    async with AsyncSessionLocal() as session:
+        user = User(
+            email="refresh-not-access@example.com",
+            username="refreshnotaccess",
+            password_hash=get_password_hash("Test1234"),
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        token = auth.create_session_refresh_token(user)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_is_single_use(monkeypatch):
+    """Refresh rotation consumes a token atomically."""
+    consumed: set[str] = set()
+
+    async def consume_once(token: str, ttl_seconds: int) -> bool:
+        assert ttl_seconds > 0
+        if token in consumed:
+            return False
+        consumed.add(token)
+        return True
+
+    monkeypatch.setattr(auth, "blacklist_token_once", consume_once)
+    async with AsyncSessionLocal() as session:
+        user = User(
+            email="single-refresh@example.com",
+            username="singlerefresh",
+            password_hash=get_password_hash("Test1234"),
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        token = auth.create_session_refresh_token(user)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        first = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        replay = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert first.status_code == 200
+    assert replay.status_code == 401
+    assert replay.json()["detail"] == "刷新令牌已使用或已撤销，请重新登录"
 
 
 @pytest.mark.asyncio
@@ -347,3 +567,76 @@ async def test_logout_blacklists_current_token(monkeypatch):
     assert logout_response.json()["message"] == "已登出"
     assert me_response.status_code == 401
     assert me_response.json()["detail"] == "Token 已失效，请重新登录"
+
+
+@pytest.mark.asyncio
+async def test_logout_revokes_existing_refresh_tokens(monkeypatch):
+    """Logout advances auth version so copied refresh tokens stop working."""
+
+    async def blacklist_succeeds(token: str, ttl_seconds: int) -> None:
+        return None
+
+    monkeypatch.setattr(auth, "blacklist_token", blacklist_succeeds)
+    async with AsyncSessionLocal() as session:
+        user = User(
+            email="logout-refresh@example.com",
+            username="logoutrefresh",
+            password_hash=get_password_hash("Test1234"),
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        access_token = auth.create_session_access_token(user, 30)
+        refresh_token = auth.create_session_refresh_token(user)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        logout_response = await client.post(
+            "/api/v1/auth/logout",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        refresh_response = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {refresh_token}"},
+        )
+
+    assert logout_response.status_code == 200
+    assert refresh_response.status_code == 401
+    assert refresh_response.json()["detail"] == "Token 已失效，请重新登录"
+
+
+@pytest.mark.asyncio
+async def test_blacklist_backend_failure_returns_503(monkeypatch):
+    """A blacklist outage cannot make potentially revoked tokens valid again."""
+
+    async def unavailable_blacklist(token: str) -> bool:
+        raise auth.RedisError("redis unavailable")
+
+    monkeypatch.setattr(
+        dependencies,
+        "is_token_blacklisted",
+        unavailable_blacklist,
+    )
+
+    async with AsyncSessionLocal() as session:
+        user = User(
+            email="blacklist-outage@example.com",
+            username="blacklistoutage",
+            password_hash=get_password_hash("Test1234"),
+        )
+        session.add(user)
+        await session.flush()
+        await get_or_create_wallet(session, user.id)
+        await session.commit()
+        await session.refresh(user)
+        token = create_access_token(
+            data={"sub": user.id, "email": user.email, "role": user.role.value}
+        )
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "认证服务暂不可用，请稍后再试"

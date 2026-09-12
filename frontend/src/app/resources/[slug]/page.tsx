@@ -1,19 +1,26 @@
-import { api } from '@/lib/api';
+import { api, getApiErrorStatus } from '@/lib/api';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import ResourceAccessCard from '@/components/resource/ResourceAccessCard';
+import ResourceViewTracker from '@/components/resource/ResourceViewTracker';
+import ShareButton from '@/components/resource/ShareButton';
+import SidebarContacts from '@/components/contact/SidebarContacts';
+import ResourceCover from '@/components/common/ResourceCover';
+import { serializeJsonLd } from '@/lib/jsonLd';
 
 interface PageProps {
-    params: {
+    params: Promise<{
         slug: string;
-    };
+    }>;
 }
 
 // Generate metadata for SEO
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     try {
-        const response = await api.resources.get(params.slug);
+        const { slug } = await params;
+        const response = await api.resources.get(slug);
         const resource = response.data;
+        const socialImage = resource.cover_image_url || '/og-image.jpg';
 
         return {
             title: resource.meta_title || resource.title,
@@ -22,11 +29,18 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
             openGraph: {
                 title: resource.title,
                 description: resource.excerpt || resource.description,
-                images: resource.cover_image_url ? [resource.cover_image_url] : [],
+                url: `/resources/${resource.slug}`,
+                images: [socialImage],
                 type: 'website',
             },
+            twitter: {
+                card: 'summary_large_image',
+                title: resource.title,
+                description: resource.excerpt || resource.description,
+                images: [socialImage],
+            },
         };
-    } catch (error) {
+    } catch {
         return {
             title: '资源详情',
         };
@@ -37,10 +51,14 @@ export default async function ResourceDetailPage({ params }: PageProps) {
     let resource = null;
 
     try {
-        const response = await api.resources.get(params.slug);
+        const { slug } = await params;
+        const response = await api.resources.get(slug);
         resource = response.data;
     } catch (error) {
-        notFound();
+        if (getApiErrorStatus(error) === 404) {
+            notFound();
+        }
+        throw error;
     }
 
     if (!resource) {
@@ -53,7 +71,7 @@ export default async function ResourceDetailPage({ params }: PageProps) {
         '@type': 'Product',
         name: resource.title,
         description: resource.description,
-        image: resource.cover_image_url,
+        image: resource.cover_image_url || '/og-image.jpg',
         offers: {
             '@type': 'Offer',
             price: resource.price,
@@ -64,10 +82,11 @@ export default async function ResourceDetailPage({ params }: PageProps) {
 
     return (
         <>
+            <ResourceViewTracker slug={resource.slug} />
             {/* JSON-LD */}
             <script
                 type="application/ld+json"
-                dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+                dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
             />
 
             <div className="min-h-screen pt-20">
@@ -76,18 +95,13 @@ export default async function ResourceDetailPage({ params }: PageProps) {
                         {/* Main Content */}
                         <div className="lg:col-span-2">
                             {/* Cover Image */}
-                            <div className="relative h-96 bg-gray-200 rounded-lg overflow-hidden mb-6">
-                                {resource.cover_image_url ? (
-                                    <img
-                                        src={resource.cover_image_url}
-                                        alt={resource.title}
-                                        className="w-full h-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-8xl">
-                                        📁
-                                    </div>
-                                )}
+                            <div className="relative aspect-[4/3] sm:aspect-video lg:aspect-auto lg:h-96 bg-gray-200 rounded-lg overflow-hidden mb-6">
+                                <ResourceCover
+                                    src={resource.cover_image_url}
+                                    alt={resource.title}
+                                    className="w-full h-full object-cover"
+                                    loading="eager"
+                                />
                             </div>
 
                             {/* Title and Description */}
@@ -201,9 +215,9 @@ export default async function ResourceDetailPage({ params }: PageProps) {
                                         coinPrice={Number(resource.coin_price || 0)}
                                     />
                                 </div>
-                                <button className="btn btn-secondary w-full">
-                                    分享
-                                </button>
+                                <ShareButton title={resource.title} />
+
+                                <SidebarContacts />
 
                                 {/* Note */}
                                 <p className="text-xs text-tertiary mt-4 text-center">

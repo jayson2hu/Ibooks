@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import String, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.utils.datetime_utils import utc_now
 
 
 class SiteSetting(Base):
@@ -23,8 +24,8 @@ class SiteSetting(Base):
     # Metadata
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False
     )
     updated_by: Mapped[str] = mapped_column(String(100), nullable=True)

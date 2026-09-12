@@ -1,61 +1,77 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { api, getApiErrorMessage } from '@/lib/api';
+import CategoryFormModal from '@/components/admin/CategoryFormModal';
 import ErrorMessage from '@/components/admin/ErrorMessage';
+import type { Category } from '@/types';
 
-interface Category {
-    id: number;
-    name: string;
-    slug: string;
-    description: string | null;
-    icon: string | null;
-    parent_id: number | null;
-    sort_order: number;
-    is_active: boolean;
-    created_at: string;
+interface CategoryListEnvelope {
+    items?: Category[];
+    data?: Category[];
+}
+
+function extractCategories(payload: unknown): Category[] {
+    if (Array.isArray(payload)) {
+        return payload as Category[];
+    }
+
+    if (payload && typeof payload === 'object') {
+        const envelope = payload as CategoryListEnvelope;
+        if (Array.isArray(envelope.items)) {
+            return envelope.items;
+        }
+        if (Array.isArray(envelope.data)) {
+            return envelope.data;
+        }
+    }
+
+    return [];
 }
 
 export default function CategoriesPage() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
-    const fetchCategories = async () => {
+    const fetchCategories = useCallback(async () => {
         try {
             setIsLoading(true);
             setError(null);
             const response = await api.categories.list(false); // Get all categories including inactive
-            console.log('Categories API Response:', response.data); // 调试日志
-            
-            // 处理不同的响应结构
-            let categoriesData = [];
-            if (response.data.items && Array.isArray(response.data.items)) {
-                categoriesData = response.data.items;
-            } else if (Array.isArray(response.data)) {
-                categoriesData = response.data;
-            } else if (response.data.data && Array.isArray(response.data.data)) {
-                categoriesData = response.data.data;
-            } else {
-                console.warn('Unexpected categories API response structure:', response.data);
-                categoriesData = [];
-            }
-            
-            setCategories(categoriesData);
-        } catch (err: any) {
+            setCategories(extractCategories(response.data));
+        } catch (err: unknown) {
             console.error('Failed to fetch categories:', err);
-            setError(err.response?.data?.detail || '无法加载分类数据');
+            setError(getApiErrorMessage(err, '无法加载分类数据'));
             setCategories([]); // 确保设置为空数组
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchCategories();
+    }, [fetchCategories]);
+
+    const closeCategoryForm = useCallback(() => {
+        setShowCreateModal(false);
+        setEditingCategory(null);
     }, []);
+
+    const handleCategorySaved = useCallback(async (action: 'created' | 'updated' | 'created-partial') => {
+        closeCategoryForm();
+        setNotice(
+            action === 'created'
+                ? '分类创建成功'
+                : action === 'updated'
+                    ? '分类更新成功'
+                    : '分类已创建，请检查排序和启用状态',
+        );
+        await fetchCategories();
+    }, [closeCategoryForm, fetchCategories]);
 
     const handleDelete = async (id: number) => {
         if (!confirm('确定要删除这个分类吗？这将影响所有相关资源。')) {
@@ -65,8 +81,8 @@ export default function CategoriesPage() {
         try {
             await api.categories.delete(id);
             await fetchCategories();
-        } catch (err: any) {
-            alert(err.response?.data?.detail || '删除失败');
+        } catch (err: unknown) {
+            alert(getApiErrorMessage(err, '删除失败'));
         }
     };
 
@@ -76,8 +92,8 @@ export default function CategoriesPage() {
                 is_active: !category.is_active
             });
             await fetchCategories();
-        } catch (err: any) {
-            alert(err.response?.data?.detail || '更新失败');
+        } catch (err: unknown) {
+            alert(getApiErrorMessage(err, '更新失败'));
         }
     };
 
@@ -88,8 +104,9 @@ export default function CategoriesPage() {
                     <h1 className="text-3xl font-bold text-gray-900">分类管理</h1>
                     <p className="mt-1 text-gray-600">管理资源分类</p>
                 </div>
-                <div className="flex justify-center items-center h-64">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <div role="status" className="flex justify-center items-center h-64">
+                    <div aria-hidden="true" className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <span className="sr-only">正在加载分类数据</span>
                 </div>
             </div>
         );
@@ -116,7 +133,11 @@ export default function CategoriesPage() {
                     <p className="mt-1 text-gray-600">管理资源分类和层级结构</p>
                 </div>
                 <button
-                    onClick={() => setShowCreateModal(true)}
+                    type="button"
+                    onClick={() => {
+                        setNotice(null);
+                        setShowCreateModal(true);
+                    }}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
                 >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -125,6 +146,12 @@ export default function CategoriesPage() {
                     添加分类
                 </button>
             </div>
+
+            {notice && (
+                <div role="status" className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                    {notice}
+                </div>
+            )}
 
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -235,7 +262,9 @@ export default function CategoriesPage() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <button
+                                                type="button"
                                                 onClick={() => handleToggleActive(category)}
+                                                aria-label={`${category.is_active ? '禁用' : '启用'}分类 ${category.name}`}
                                                 className={`px-2.5 py-1 text-xs font-medium rounded-full ${category.is_active
                                                         ? 'bg-green-100 text-green-700 hover:bg-green-200'
                                                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -246,12 +275,17 @@ export default function CategoriesPage() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <button
-                                                onClick={() => setEditingCategory(category)}
+                                                type="button"
+                                                onClick={() => {
+                                                    setNotice(null);
+                                                    setEditingCategory(category);
+                                                }}
                                                 className="text-blue-600 hover:text-blue-900 mr-4"
                                             >
                                                 编辑
                                             </button>
                                             <button
+                                                type="button"
                                                 onClick={() => handleDelete(category.id)}
                                                 className="text-red-600 hover:text-red-900"
                                             >
@@ -266,27 +300,15 @@ export default function CategoriesPage() {
                 </div>
             </div>
 
-            {/* Create/Edit Modal Placeholder */}
+            {/* Create/Edit Modal */}
             {(showCreateModal || editingCategory) && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-                        <h2 className="text-xl font-bold mb-4">
-                            {editingCategory ? '编辑分类' : '创建分类'}
-                        </h2>
-                        <p className="text-gray-600 mb-4">
-                            分类创建/编辑功能即将推出
-                        </p>
-                        <button
-                            onClick={() => {
-                                setShowCreateModal(false);
-                                setEditingCategory(null);
-                            }}
-                            className="w-full px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-                        >
-                            关闭
-                        </button>
-                    </div>
-                </div>
+                <CategoryFormModal
+                    key={editingCategory?.id ?? 'create'}
+                    categories={categories}
+                    category={editingCategory}
+                    onClose={closeCategoryForm}
+                    onSaved={handleCategorySaved}
+                />
             )}
         </div>
     );

@@ -6,6 +6,8 @@ from decimal import Decimal
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
 from app.main import app
@@ -102,7 +104,7 @@ async def test_create_free_resource_order_is_paid_and_grants_access():
     assert data["payment_method"] == "free"
     assert data["user_id"] == user.id
     assert access_response.status_code == 200
-    assert access_response.json()["cloud_link"] == "https://pan.example.com/free-order-resource"
+    assert access_response.json() == {"has_access": True}
 
 
 @pytest.mark.asyncio
@@ -133,7 +135,7 @@ async def test_create_paid_resource_order_uses_coin_balance():
     assert data["amount"] == "99.00"
     assert data["coin_amount"] == 30
     assert access_response.status_code == 200
-    assert access_response.json()["cloud_link"] == "https://pan.example.com/paid-order-resource"
+    assert access_response.json() == {"has_access": True}
 
     async with AsyncSessionLocal() as session:
         wallet = (await session.execute(
@@ -196,6 +198,23 @@ async def test_create_paid_resource_order_rejects_insufficient_coin_balance():
 
 
 @pytest.mark.asyncio
+async def test_paid_legacy_resource_requires_coin_price_configuration():
+    """A monetary-priced legacy row cannot be purchased as a free resource."""
+    _, token = await create_user("legacy-price@example.com", "legacyprice")
+    resource = await create_resource("legacy-price-resource", is_free=False, coin_price=0)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/orders",
+            json={"resource_id": resource.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "该资源尚未配置有效的书币价格"
+
+
+@pytest.mark.asyncio
 async def test_duplicate_paid_purchase_returns_409():
     """Users cannot buy a resource again after a paid order exists."""
     user, token = await create_user("duplicate@example.com", "duplicate")
@@ -215,6 +234,115 @@ async def test_duplicate_paid_purchase_returns_409():
 
     assert first.status_code == 201
     assert second.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_paid_order_user_resource_pair_is_unique():
+    """The database rejects duplicate paid orders for one user and resource."""
+    user, _ = await create_user("unique-order@example.com", "uniqueorder")
+    resource = await create_resource("unique-order-resource", is_free=True)
+
+    async with AsyncSessionLocal() as session:
+        session.add_all([
+            Order(
+                order_no="ORDUNIQUE001",
+                user_id=user.id,
+                resource_id=resource.id,
+                amount=Decimal("0.00"),
+                coin_amount=0,
+                payment_method=PaymentMethod.FREE,
+                status=OrderStatus.PAID,
+            ),
+            Order(
+                order_no="ORDUNIQUE002",
+                user_id=user.id,
+                resource_id=resource.id,
+                amount=Decimal("0.00"),
+                coin_amount=0,
+                payment_method=PaymentMethod.FREE,
+                status=OrderStatus.PAID,
+            ),
+        ])
+
+        with pytest.raises(IntegrityError):
+            await session.commit()
+        await session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_non_paid_orders_do_not_block_a_later_purchase():
+    """Cancelled and pending history does not permanently block a purchase."""
+    user, token = await create_user("retry-order@example.com", "retryorder")
+    resource = await create_resource("retry-order-resource", is_free=True)
+    pending = await create_pending_order(user.id, resource.id, order_no="ORDRETRYPENDING")
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        cancel_response = await client.patch(
+            f"/api/v1/orders/{pending.order_no}/cancel",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        purchase_response = await client.post(
+            "/api/v1/orders",
+            json={"resource_id": resource.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert cancel_response.status_code == 200
+    assert purchase_response.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_order_unique_conflict_returns_409_without_debiting_wallet(monkeypatch):
+    """A uniqueness race is mapped to 409 before coins are debited."""
+    user, token = await create_user("race-order@example.com", "raceorder")
+    resource = await create_resource("race-order-resource", is_free=False, coin_price=30)
+
+    async with AsyncSessionLocal() as session:
+        await credit_wallet(
+            session,
+            user.id,
+            50,
+            CoinLedgerType.RECHARGE,
+            related_order_no="RCHRACE",
+        )
+        await session.commit()
+
+    async def raise_unique_conflict(self, *args, **kwargs):
+        raise IntegrityError("INSERT INTO orders", {}, Exception("unique conflict"))
+
+    monkeypatch.setattr(AsyncSession, "flush", raise_unique_conflict)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/orders",
+            json={"resource_id": resource.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Resource already purchased"
+
+    async with AsyncSessionLocal() as session:
+        wallet = (await session.execute(
+            select(Wallet).where(Wallet.user_id == user.id)
+        )).scalar_one()
+        orders = (await session.execute(
+            select(Order).where(
+                Order.user_id == user.id,
+                Order.resource_id == resource.id,
+            )
+        )).scalars().all()
+        purchase_ledgers = (await session.execute(
+            select(CoinLedger).where(
+                CoinLedger.user_id == user.id,
+                CoinLedger.type == CoinLedgerType.PURCHASE,
+            )
+        )).scalars().all()
+
+        assert wallet.balance == 50
+        assert wallet.total_spent == 0
+        assert orders == []
+        assert purchase_ledgers == []
 
 
 @pytest.mark.asyncio
@@ -323,14 +451,18 @@ async def test_paid_order_grants_paid_resource_access():
         )
 
     assert response.status_code == 200
-    assert response.json()["cloud_link"] == "https://pan.example.com/paid-access-resource"
+    assert response.json() == {"has_access": True}
 
 
-async def create_pending_order(user_id: int, resource_id: int) -> Order:
+async def create_pending_order(
+    user_id: int,
+    resource_id: int,
+    order_no: str = "ORDTESTPENDING",
+) -> Order:
     """Create a legacy pending order directly."""
     async with AsyncSessionLocal() as session:
         order = Order(
-            order_no="ORDTESTPENDING",
+            order_no=order_no,
             user_id=user_id,
             resource_id=resource_id,
             amount=Decimal("99.00"),

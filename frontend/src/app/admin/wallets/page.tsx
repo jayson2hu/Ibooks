@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { api, getApiErrorMessage } from '@/lib/api';
 import type { AdminWallet, PaginatedResponse } from '@/types';
 
 export default function AdminWalletsPage() {
@@ -14,30 +14,30 @@ export default function AdminWalletsPage() {
     const [error, setError] = useState('');
     const [adjustingUserId, setAdjustingUserId] = useState<number | null>(null);
 
-    const loadWallets = async (targetPage = page) => {
+    const loadWallets = useCallback(async (targetPage: number, query: string) => {
         setLoading(true);
         setError('');
         try {
             const response = await api.admin.getWallets({
                 page: targetPage,
                 page_size: 20,
-                search: search || undefined,
+                search: query || undefined,
             });
             const data = response.data as PaginatedResponse<AdminWallet>;
             setWallets(data.items);
             setPage(data.page);
             setPages(data.pages);
             setTotal(data.total);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '钱包列表加载失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '钱包列表加载失败'));
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        loadWallets(1);
-    }, []);
+        void loadWallets(1, '');
+    }, [loadWallets]);
 
     const adjustWallet = async (wallet: AdminWallet) => {
         const rawAmount = window.prompt('输入调整书币数量，正数加币，负数扣币');
@@ -52,10 +52,9 @@ export default function AdminWalletsPage() {
         setError('');
         try {
             await api.admin.adjustWallet(wallet.user_id, { amount, description });
-            await loadWallets(page);
-        } catch (err: any) {
-            const detail = err.response?.data?.detail;
-            setError(typeof detail === 'string' ? detail : detail?.message || '钱包调整失败');
+            await loadWallets(page, search);
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '钱包调整失败'));
         } finally {
             setAdjustingUserId(null);
         }
@@ -74,11 +73,11 @@ export default function AdminWalletsPage() {
                 <input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    onKeyDown={(event) => event.key === 'Enter' && loadWallets(1)}
+                    onKeyDown={(event) => event.key === 'Enter' && loadWallets(1, search)}
                     placeholder="搜索邮箱或用户名"
                     className="flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
                 />
-                <button onClick={() => loadWallets(1)} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+                <button onClick={() => loadWallets(1, search)} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
                     搜索
                 </button>
             </div>
@@ -130,8 +129,8 @@ export default function AdminWalletsPage() {
             <div className="flex items-center justify-between text-sm text-gray-600">
                 <span>第 {page} / {pages || 1} 页，共 {total} 条</span>
                 <div className="flex gap-2">
-                    <button disabled={page <= 1 || loading} onClick={() => loadWallets(page - 1)} className="rounded-lg border px-4 py-2 disabled:opacity-50">上一页</button>
-                    <button disabled={page >= pages || loading} onClick={() => loadWallets(page + 1)} className="rounded-lg border px-4 py-2 disabled:opacity-50">下一页</button>
+                    <button disabled={page <= 1 || loading} onClick={() => loadWallets(page - 1, search)} className="rounded-lg border px-4 py-2 disabled:opacity-50">上一页</button>
+                    <button disabled={page >= pages || loading} onClick={() => loadWallets(page + 1, search)} className="rounded-lg border px-4 py-2 disabled:opacity-50">下一页</button>
                 </div>
             </div>
         </div>

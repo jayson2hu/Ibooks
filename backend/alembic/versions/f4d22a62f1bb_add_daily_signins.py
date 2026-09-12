@@ -7,7 +7,7 @@ Create Date: 2026-04-28 23:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 # revision identifiers, used by Alembic.
@@ -50,7 +50,7 @@ def upgrade() -> None:
                 'value': 'false',
                 'category': 'signin',
                 'description': '是否开启每日签到奖励',
-                'updated_at': datetime.utcnow(),
+                'updated_at': datetime.now(timezone.utc).replace(tzinfo=None),
                 'updated_by': 'migration',
             },
             {
@@ -58,7 +58,7 @@ def upgrade() -> None:
                 'value': '5',
                 'category': 'signin',
                 'description': '每日签到奖励书币数量',
-                'updated_at': datetime.utcnow(),
+                'updated_at': datetime.now(timezone.utc).replace(tzinfo=None),
                 'updated_by': 'migration',
             },
         ],

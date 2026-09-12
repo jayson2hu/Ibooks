@@ -2,9 +2,11 @@
 Standardized API response schemas for consistent responses across all endpoints.
 """
 from pydantic import BaseModel, Field
-from typing import Generic, TypeVar, List, Optional, Any, Union
+from typing import Generic, TypeVar, List, Optional
 from enum import Enum
 from datetime import datetime
+
+from app.utils.datetime_utils import utc_now
 
 T = TypeVar('T')
 
@@ -34,12 +36,7 @@ class ApiResponse(BaseModel, Generic[T]):
     code: int = 200
     data: Optional[T] = None
     message: str = "Success"
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    timestamp: datetime = Field(default_factory=utc_now)
 
 
 class ErrorDetail(BaseModel):
@@ -69,7 +66,7 @@ class ErrorResponse(BaseModel):
     code: int = 400
     errors: List[ErrorDetail] = []
     message: str = "An error occurred"
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utc_now)
 
 
 class PaginationMeta(BaseModel):
@@ -109,7 +106,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
     data: List[T]
     meta: PaginationMeta
     message: str = "Retrieved successfully"
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utc_now)
 
 
 class Message(BaseModel):

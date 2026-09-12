@@ -1,13 +1,16 @@
 """
 Bulk import functionality for resources from Excel/CSV files.
 """
-from typing import List, Dict, Any
+import asyncio
+from typing import Dict, Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
 from app.models.resource import Resource
 from app.models.category import Category
-from app.utils.seo import generate_slug
-from datetime import datetime
-from sqlalchemy import select
+from app.services.resource_slugs import generate_unique_slug
+from app.utils.datetime_utils import utc_now
 
 
 async def import_resources_from_excel(
@@ -25,6 +28,7 @@ async def import_resources_from_excel(
     - category_name
     - tags (comma-separated)
     - price
+    - coin_price
     - cloud_link
     - access_code
     - file_size
@@ -43,7 +47,7 @@ async def import_resources_from_excel(
     import pandas as pd
 
     # Read Excel file
-    df = pd.read_excel(file_path)
+    df = await asyncio.to_thread(pd.read_excel, file_path)
     return await import_resources_from_dataframe(df, db, category_mapping)
 
 
@@ -61,6 +65,7 @@ async def import_resources_from_dataframe(
         "failed": 0,
         "errors": []
     }
+    reserved_slugs: set[str] = set()
     
     # Get all categories if mapping not provided
     if category_mapping is None:
@@ -74,13 +79,11 @@ async def import_resources_from_dataframe(
             if pd.isna(row.get('title')):
                 raise ValueError(f"Row {idx + 2}: Missing required field 'title'")
             
-            # Generate slug
-            slug = generate_slug(row['title'])
-            
-            # Check if slug exists
-            result = await db.execute(select(Resource).where(Resource.slug == slug))
-            if result.scalar_one_or_none():
-                slug = f"{slug}-{int(datetime.utcnow().timestamp())}"
+            slug = await generate_unique_slug(
+                db,
+                str(row['title']),
+                reserved_slugs=reserved_slugs,
+            )
             
             # Get category ID
             category_id = None
@@ -91,6 +94,11 @@ async def import_resources_from_dataframe(
             tags = []
             if not pd.isna(row.get('tags')):
                 tags = [tag.strip() for tag in str(row['tags']).split(',')]
+
+            coin_price_value = row.get('coin_price', 0)
+            coin_price = 0 if pd.isna(coin_price_value) else int(coin_price_value)
+            if coin_price < 0:
+                raise ValueError("coin_price must be non-negative")
             
             # Create resource
             resource = Resource(
@@ -101,6 +109,7 @@ async def import_resources_from_dataframe(
                 category_id=category_id,
                 tags=tags,
                 price=float(row.get('price', 0)),
+                coin_price=coin_price,
                 cloud_link=row.get('cloud_link') if not pd.isna(row.get('cloud_link')) else None,
                 access_code=row.get('access_code') if not pd.isna(row.get('access_code')) else None,
                 file_size=row.get('file_size') if not pd.isna(row.get('file_size')) else None,
@@ -108,10 +117,11 @@ async def import_resources_from_dataframe(
                 resource_type=row.get('resource_type') if not pd.isna(row.get('resource_type')) else None,
                 cover_image_url=row.get('cover_image_url') if not pd.isna(row.get('cover_image_url')) else None,
                 is_published=True,
-                published_at=datetime.utcnow()
+                published_at=utc_now()
             )
             
             db.add(resource)
+            reserved_slugs.add(slug)
             stats["success"] += 1
             
         except Exception as e:
@@ -137,7 +147,7 @@ async def import_resources_from_csv(
     import pandas as pd
 
     # Read CSV file
-    df = pd.read_csv(file_path)
+    df = await asyncio.to_thread(pd.read_csv, file_path)
     return await import_resources_from_dataframe(df, db, category_mapping)
 
 
@@ -157,6 +167,7 @@ def create_import_template_excel(output_path: str):
         'category_name': ['电子书', '视频课程'],
         'tags': ['Python,编程', 'Web开发,前端'],
         'price': [99.00, 199.00],
+        'coin_price': [10, 20],
         'cloud_link': ['https://pan.baidu.com/s/xxxxx', 'https://pan.baidu.com/s/yyyyy'],
         'access_code': ['abc123', 'xyz789'],
         'file_size': ['2.5 GB', '5 GB'],

@@ -1,0 +1,17 @@
+{
+  "name": "资源市场",
+  "short_name": "资源市场",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "description": "电子书、视频课程和技术文档数字资源市场",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -2,7 +2,6 @@
 JWT token blacklist helpers backed by Redis.
 """
 import redis.asyncio as redis
-from redis.exceptions import RedisError
 
 from app.config import settings
 
@@ -26,7 +25,20 @@ async def is_token_blacklisted(token: str) -> bool:
     client = redis.from_url(settings.REDIS_URL, decode_responses=True)
     try:
         return await client.get(blacklist_key(token)) is not None
-    except (RedisError, OSError):
-        return False
+    finally:
+        await client.aclose()
+
+
+async def blacklist_token_once(token: str, ttl_seconds: int) -> bool:
+    """Atomically mark a token used; return false when it was already marked."""
+    client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+    try:
+        result = await client.set(
+            blacklist_key(token),
+            "1",
+            ex=max(ttl_seconds, 1),
+            nx=True,
+        )
+        return bool(result)
     finally:
         await client.aclose()

@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, getApiErrorMessage } from '@/lib/api';
 import CopyButton from '@/components/common/CopyButton';
-import type { Order, OrderStatus, PaginatedResponse, PaymentMethod, ResourceAccess } from '@/types';
+import type { Order, OrderStatus, PaymentMethod, ResourceAccess } from '@/types';
 
 const statusLabels: Record<OrderStatus, string> = {
     pending: '待支付',
@@ -50,7 +50,7 @@ function OrdersContent() {
     const [accessOrderNo, setAccessOrderNo] = useState('');
     const [access, setAccess] = useState<ResourceAccess | null>(null);
 
-    const loadOrders = async (targetPage = page) => {
+    const loadOrders = useCallback(async (targetPage: number) => {
         setLoading(true);
         setError('');
         if (!localStorage.getItem('token')) {
@@ -60,21 +60,21 @@ function OrdersContent() {
         }
         try {
             const response = await api.orders.my({ page: targetPage, page_size: 10 });
-            const data = response.data as PaginatedResponse<Order>;
+            const data = response.data;
             setOrders(data.items);
             setPage(data.page);
             setPages(data.pages);
             setTotal(data.total);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '订单加载失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '订单加载失败'));
         } finally {
             setLoading(false);
         }
-    };
+    }, [router]);
 
     useEffect(() => {
-        loadOrders(1);
-    }, []);
+        void loadOrders(1);
+    }, [loadOrders]);
 
     const cancelOrder = async (orderNo: string) => {
         setActionOrderNo(orderNo);
@@ -82,8 +82,8 @@ function OrdersContent() {
         try {
             await api.orders.cancel(orderNo);
             await loadOrders(page);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '取消订单失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '取消订单失败'));
         } finally {
             setActionOrderNo('');
         }
@@ -96,12 +96,14 @@ function OrdersContent() {
         }
         setActionOrderNo(order.order_no);
         setError('');
+        setAccess(null);
+        setAccessOrderNo('');
         try {
-            const response = await api.resources.getAccess(order.resource.slug);
+            const response = await api.resources.download(order.resource.slug);
             setAccess(response.data);
             setAccessOrderNo(order.order_no);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '资源链接加载失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '资源链接加载失败'));
         } finally {
             setActionOrderNo('');
         }
@@ -149,6 +151,11 @@ function OrdersContent() {
                             </button>
                         </div>
                         <div className="space-y-2">
+                            {activeAccessLinks.length === 0 && !access?.access_code && (
+                                <p className="rounded bg-white p-3 text-sm text-yellow-800">
+                                    当前资源暂未配置云盘链接，请稍后再试。
+                                </p>
+                            )}
                             {activeAccessLinks.map((link, index) => (
                                 <div key={`${link}-${index}`} className="rounded bg-white p-3 text-sm">
                                     <div className="mb-2 break-all text-gray-700">{link}</div>
@@ -221,7 +228,7 @@ function OrdersContent() {
                                                     disabled={actionOrderNo === order.order_no}
                                                     onClick={() => showAccess(order)}
                                                 >
-                                                    获取资源
+                                                    {actionOrderNo === order.order_no ? '正在获取...' : '获取资源'}
                                                 </button>
                                             )}
                                             {order.status === 'pending' && (

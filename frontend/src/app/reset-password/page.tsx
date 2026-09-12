@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, getApiErrorMessage } from '@/lib/api';
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
     const searchParams = useSearchParams();
     const token = searchParams.get('token') || '';
     const [password, setPassword] = useState('');
@@ -33,8 +33,8 @@ export default function ResetPasswordPage() {
         try {
             const response = await api.auth.resetPassword(token, password);
             setMessage(response.data?.message || '密码重置成功');
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '密码重置失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '密码重置失败'));
         } finally {
             setLoading(false);
         }
@@ -85,5 +85,13 @@ export default function ResetPasswordPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function ResetPasswordPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">正在加载...</div>}>
+            <ResetPasswordContent />
+        </Suspense>
     );
 }

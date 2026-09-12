@@ -5,7 +5,7 @@ Revises: f4d22a62f1bb
 Create Date: 2026-04-29 00:00:00.000000
 
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 from alembic import op
 import sqlalchemy as sa
@@ -72,7 +72,7 @@ def upgrade() -> None:
         sa.column('created_at', sa.DateTime),
         sa.column('updated_at', sa.DateTime),
     )
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     op.bulk_insert(
         recharge_packages,
         [

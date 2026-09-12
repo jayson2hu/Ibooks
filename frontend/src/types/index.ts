@@ -14,6 +14,8 @@ export interface User {
     last_login_at?: string;
 }
 
+export type AdminUserUpdate = Partial<Pick<User, 'full_name' | 'role' | 'status' | 'avatar_url'>>;
+
 export interface Resource {
     id: number;
     title: string;
@@ -30,6 +32,10 @@ export interface Resource {
     file_format?: string;
     resource_type?: string;
     cover_image_url?: string;
+    preview_images?: string[];
+    meta_title?: string;
+    meta_description?: string;
+    meta_keywords?: string;
     is_published: boolean;
     is_featured: boolean;
     view_count: number;
@@ -37,6 +43,14 @@ export interface Resource {
     created_at: string;
     updated_at: string;
     published_at?: string;
+}
+
+export interface AdminResourceListParams {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    category_id?: number;
+    is_published?: boolean;
 }
 
 export interface ResourceDetail extends Resource {
@@ -50,6 +64,10 @@ export interface ResourceAccess {
     cloud_link?: string | null;
     backup_links: string[];
     access_code?: string | null;
+}
+
+export interface ResourceAccessCheck {
+    has_access: boolean;
 }
 
 export type OrderStatus = 'pending' | 'paid' | 'cancelled' | 'refunded';
@@ -169,15 +187,31 @@ export interface Category {
     id: number;
     name: string;
     slug: string;
-    description?: string;
-    parent_id?: number;
-    icon?: string;
-    color?: string;
-    cover_image_url?: string;
+    description?: string | null;
+    parent_id?: number | null;
+    icon?: string | null;
+    color?: string | null;
+    cover_image_url?: string | null;
     is_active: boolean;
     sort_order: number;
     resource_count: number;
     created_at: string;
+}
+
+export interface CategoryCreateInput {
+    name: string;
+    description?: string | null;
+    parent_id?: number | null;
+    icon?: string | null;
+    color?: string | null;
+    cover_image_url?: string | null;
+    meta_title?: string | null;
+    meta_description?: string | null;
+}
+
+export interface CategoryUpdateInput extends Partial<CategoryCreateInput> {
+    is_active?: boolean;
+    sort_order?: number;
 }
 
 export interface CategoryTree extends Category {
@@ -204,6 +238,94 @@ export interface Contact {
     show_in_sidebar: boolean;
 }
 
+export type AuditLogDetails =
+    | string
+    | number
+    | boolean
+    | null
+    | AuditLogDetails[]
+    | { [key: string]: AuditLogDetails };
+
+export interface AuditLog {
+    id: number;
+    action: string;
+    user_id?: number | null;
+    user_email?: string | null;
+    ip_address?: string | null;
+    success: boolean;
+    created_at: string;
+    details?: AuditLogDetails;
+}
+
+export interface SiteSetting {
+    key: string;
+    value: string;
+    category: string;
+    description?: string | null;
+    updated_at: string;
+    updated_by?: string | null;
+}
+
+export interface SiteSettingsGroup {
+    category: string;
+    settings: SiteSetting[];
+}
+
+export interface SiteSettingUpdate {
+    key: string;
+    value: string;
+    category?: string;
+}
+
+export interface CrawlerField {
+    key: string;
+    label: string;
+    description: string;
+    required: boolean;
+    enabled: boolean;
+}
+
+export interface CrawlerStatus {
+    source_key: string;
+    source_name: string;
+    source_site: string;
+    enabled: boolean;
+    interval_minutes: number;
+    max_pages: number;
+    request_timeout_seconds: number;
+    target_category_id?: number | null;
+    available_fields: CrawlerField[];
+    is_running: boolean;
+    last_run_at?: string | null;
+    last_status: string;
+    last_message?: string | null;
+    last_count: number;
+}
+
+export interface CrawlerConfig {
+    enabled: boolean;
+    interval_minutes: number;
+    max_pages: number;
+    request_timeout_seconds: number;
+    target_category_id: number | null;
+    enabled_fields: string[];
+}
+
+export interface CrawlerRunResponse {
+    imported_count: number;
+    updated_count: number;
+    skipped_count: number;
+    total_count: number;
+    started_at: string;
+    finished_at: string;
+    message: string;
+}
+
+export interface SeoGenerationResponse {
+    message: string;
+    generated: string[];
+}
+
 export interface PaginatedResponse<T> {
     items: T[];
     total: number;
@@ -213,6 +335,12 @@ export interface PaginatedResponse<T> {
 }
 
 export interface ApiError {
-    detail: string;
+    detail: string | {
+        message?: string;
+        balance?: number;
+        required_coins?: number;
+        generated?: string[];
+        failed?: string[];
+    };
     code?: string;
 }

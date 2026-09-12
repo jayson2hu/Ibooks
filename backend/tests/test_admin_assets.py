@@ -10,7 +10,7 @@ from app.main import app
 from app.models.recharge import RechargePackage
 from app.models.user import User, UserRole
 from app.models.wallet import CoinLedger, CoinLedgerType, Wallet
-from app.services.wallet import credit_wallet, get_or_create_wallet
+from app.services.wallet import get_or_create_wallet
 from app.utils.security import create_access_token, get_password_hash
 
 

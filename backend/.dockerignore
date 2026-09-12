@@ -1,0 +1,46 @@
+# Source control and editor metadata
+.git
+.github
+.vscode
+.idea
+
+# Local environment and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+*.key
+*.pem
+
+# Python environments, caches, and build output
+.venv
+venv
+env
+**/__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+.coverage.*
+htmlcov
+build
+dist
+
+# Local runtime data
+*.db
+*.sqlite
+*.sqlite3
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+logs
+uploads
+static_pages
+
+# Development-only files
+tests
+*.log
+.DS_Store
+Thumbs.db

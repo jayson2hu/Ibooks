@@ -2,10 +2,11 @@
 User model for authentication and authorization.
 """
 from sqlalchemy import String, Boolean, DateTime, Enum as SQLEnum
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 import enum
 from app.database import Base
+from app.utils.datetime_utils import utc_now
 
 
 class UserRole(str, enum.Enum):
@@ -52,13 +53,22 @@ class User(Base):
     # Email verification
     is_email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     email_verification_token: Mapped[str | None] = mapped_column(String(255))
+    email_verification_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    # Incrementing this value invalidates every JWT issued for an older
+    # authentication state (for example after a password reset).
+    auth_version: Mapped[int] = mapped_column(
+        default=0,
+        server_default="0",
+        nullable=False,
+    )
     
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)

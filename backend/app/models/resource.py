@@ -1,17 +1,53 @@
 """
 Resource model for digital products (eBooks, courses, documents).
 """
-from sqlalchemy import String, Text, Numeric, Integer, DateTime, Boolean, ForeignKey, JSON
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    Numeric,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
-from typing import List
+from typing import TYPE_CHECKING, List
 from app.database import Base
+from app.utils.datetime_utils import utc_now
+
+if TYPE_CHECKING:
+    from app.models.category import Category
 
 
 class Resource(Base):
     """Digital resource/product model."""
 
     __tablename__ = "resources"
+    __table_args__ = (
+        Index(
+            "uq_resources_source_site_external_id",
+            "source_site",
+            "source_external_id",
+            unique=True,
+            postgresql_where=text(
+                "source_site IS NOT NULL AND source_external_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "source_site IS NOT NULL AND source_external_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_resources_source_url",
+            "source_url",
+            unique=True,
+            postgresql_where=text("source_url IS NOT NULL"),
+            sqlite_where=text("source_url IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
@@ -22,7 +58,14 @@ class Resource(Base):
     excerpt: Mapped[str | None] = mapped_column(String(500))  # Short description for listing
 
     # Category and Tags
-    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True)
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "categories.id",
+            name="fk_resources_category_id_categories",
+            ondelete="RESTRICT",
+        ),
+        index=True,
+    )
     category: Mapped["Category"] = relationship("Category", back_populates="resources")
     tags: Mapped[List[str]] = mapped_column(JSON, default=list)  # JSON array of tags
 
@@ -70,11 +113,11 @@ class Resource(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime)

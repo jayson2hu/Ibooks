@@ -14,6 +14,17 @@ SIGNIN_ENABLED_KEY = "signin_enabled"
 SIGNIN_REWARD_COINS_KEY = "signin_reward_coins"
 SIGNIN_CATEGORY = "signin"
 
+USER_REGISTRATION_ENABLED_KEY = "user_registration_enabled"
+MAX_LOGIN_ATTEMPTS_KEY = "max_login_attempts"
+SESSION_TIMEOUT_MINUTES_KEY = "session_timeout_minutes"
+
+DEFAULT_USER_REGISTRATION_ENABLED = True
+DEFAULT_MAX_LOGIN_ATTEMPTS = 10
+MIN_LOGIN_ATTEMPTS = 1
+MAX_LOGIN_ATTEMPTS = 10
+MIN_SESSION_TIMEOUT_MINUTES = 5
+MAX_SESSION_TIMEOUT_MINUTES = 1440
+
 CRAWLER_CATEGORY = "crawler"
 
 CRAWLER_1024_DEFAULT_SETTINGS = [
@@ -106,6 +117,15 @@ class Crawler1024Settings:
     last_count: int
 
 
+@dataclass(frozen=True)
+class AuthRuntimeSettings:
+    """Authentication controls loaded from persisted site settings."""
+
+    user_registration_enabled: bool
+    max_login_attempts: int
+    session_timeout_minutes: int
+
+
 async def get_setting_value(db: AsyncSession, key: str, default: str) -> str:
     """Return a setting value or a default if missing."""
     result = await db.execute(select(SiteSetting).where(SiteSetting.key == key))
@@ -113,20 +133,67 @@ async def get_setting_value(db: AsyncSession, key: str, default: str) -> str:
     return setting.value if setting else default
 
 
-def _parse_bool(value: str, default: bool = False) -> bool:
+def _parse_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in ("1", "true", "yes", "on")
 
 
-def _parse_int(value: str, default: int, minimum: int | None = None) -> int:
+def _parse_int(
+    value: str | None,
+    default: int,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
     try:
         parsed = int(value)
     except (TypeError, ValueError):
         parsed = default
     if minimum is not None:
-        return max(parsed, minimum)
+        parsed = max(parsed, minimum)
+    if maximum is not None:
+        parsed = min(parsed, maximum)
     return parsed
+
+
+async def get_auth_runtime_settings(
+    db: AsyncSession,
+    *,
+    default_session_timeout_minutes: int,
+) -> AuthRuntimeSettings:
+    """Return effective authentication controls with safe compatibility defaults."""
+    keys = (
+        USER_REGISTRATION_ENABLED_KEY,
+        MAX_LOGIN_ATTEMPTS_KEY,
+        SESSION_TIMEOUT_MINUTES_KEY,
+    )
+    result = await db.execute(select(SiteSetting).where(SiteSetting.key.in_(keys)))
+    values = {setting.key: setting.value for setting in result.scalars().all()}
+
+    bounded_default_session_timeout = _parse_int(
+        str(default_session_timeout_minutes),
+        MAX_SESSION_TIMEOUT_MINUTES,
+        minimum=MIN_SESSION_TIMEOUT_MINUTES,
+        maximum=MAX_SESSION_TIMEOUT_MINUTES,
+    )
+    return AuthRuntimeSettings(
+        user_registration_enabled=_parse_bool(
+            values.get(USER_REGISTRATION_ENABLED_KEY),
+            DEFAULT_USER_REGISTRATION_ENABLED,
+        ),
+        max_login_attempts=_parse_int(
+            values.get(MAX_LOGIN_ATTEMPTS_KEY),
+            DEFAULT_MAX_LOGIN_ATTEMPTS,
+            minimum=MIN_LOGIN_ATTEMPTS,
+            maximum=MAX_LOGIN_ATTEMPTS,
+        ),
+        session_timeout_minutes=_parse_int(
+            values.get(SESSION_TIMEOUT_MINUTES_KEY),
+            bounded_default_session_timeout,
+            minimum=MIN_SESSION_TIMEOUT_MINUTES,
+            maximum=MAX_SESSION_TIMEOUT_MINUTES,
+        ),
+    )
 
 
 def _parse_optional_int(value: str) -> int | None:

@@ -1,6 +1,8 @@
 import { api } from '@/lib/api';
 import ResourceCard from '@/components/resource/ResourceCard';
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import type { Resource } from '@/types';
 
 export const metadata: Metadata = {
     title: '资源列表',
@@ -8,32 +10,63 @@ export const metadata: Metadata = {
 };
 
 interface PageProps {
-    searchParams: {
+    searchParams: Promise<{
         page?: string;
         category_id?: string;
         is_featured?: string;
         is_free?: string;
         search?: string;
-    };
+    }>;
+}
+
+function buildResourcesHref(query: Awaited<PageProps['searchParams']>, page: number): string {
+    const params = new URLSearchParams();
+    if (page > 1) {
+        params.set('page', String(page));
+    }
+    if (query.category_id) {
+        params.set('category_id', query.category_id);
+    }
+    if (query.is_featured) {
+        params.set('is_featured', query.is_featured);
+    }
+    if (query.is_free) {
+        params.set('is_free', query.is_free);
+    }
+    if (query.search) {
+        params.set('search', query.search);
+    }
+
+    const search = params.toString();
+    return search ? `/resources?${search}` : '/resources';
 }
 
 export default async function ResourcesPage({ searchParams }: PageProps) {
-    const page = parseInt(searchParams.page || '1');
+    const query = await searchParams;
+    const requestedPage = Number.parseInt(query.page || '1', 10);
+    const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
     const pageSize = 12;
+    const requestedCategoryId = query.category_id
+        ? Number.parseInt(query.category_id, 10)
+        : undefined;
+    const categoryId = requestedCategoryId && requestedCategoryId > 0
+        ? requestedCategoryId
+        : undefined;
 
     // Fetch resources from API
-    let resources = [];
+    let resources: Resource[] = [];
     let total = 0;
     let pages = 0;
+    let loadFailed = false;
 
     try {
         const response = await api.resources.list({
             page,
             page_size: pageSize,
-            category_id: searchParams.category_id ? parseInt(searchParams.category_id) : undefined,
-            is_featured: searchParams.is_featured === 'true' ? true : undefined,
-            is_free: searchParams.is_free === 'true' ? true : undefined,
-            search: searchParams.search,
+            category_id: categoryId,
+            is_featured: query.is_featured === 'true' ? true : undefined,
+            is_free: query.is_free === 'true' ? true : undefined,
+            search: query.search,
         });
 
         const data = response.data;
@@ -42,6 +75,7 @@ export default async function ResourcesPage({ searchParams }: PageProps) {
         pages = data.pages;
     } catch (error) {
         console.error('Failed to fetch resources:', error);
+        loadFailed = true;
     }
 
     return (
@@ -50,40 +84,53 @@ export default async function ResourcesPage({ searchParams }: PageProps) {
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-4xl font-bold mb-4">
-                        {searchParams.search ? `搜索: ${searchParams.search}` : '浏览资源'}
+                        {query.search ? `搜索: ${query.search}` : '浏览资源'}
                     </h1>
-                    <p className="text-secondary">
-                        共找到 {total} 个资源
-                    </p>
+                    {loadFailed ? (
+                        <p className="text-secondary">资源数据暂时不可用</p>
+                    ) : (
+                        <p className="text-secondary">共找到 {total} 个资源</p>
+                    )}
                 </div>
 
                 {/* Filters */}
                 <div className="flex flex-wrap gap-4 mb-8">
-                    <a
+                    <Link
                         href="/resources"
-                        className={`btn ${!searchParams.is_featured && !searchParams.is_free ? 'btn-primary' : 'btn-secondary'}`}
+                        className={`btn ${!query.is_featured && !query.is_free ? 'btn-primary' : 'btn-secondary'}`}
                     >
                         全部
-                    </a>
-                    <a
+                    </Link>
+                    <Link
                         href="/resources?is_featured=true"
-                        className={`btn ${searchParams.is_featured === 'true' ? 'btn-primary' : 'btn-secondary'}`}
+                        className={`btn ${query.is_featured === 'true' ? 'btn-primary' : 'btn-secondary'}`}
                     >
                         精选推荐
-                    </a>
-                    <a
+                    </Link>
+                    <Link
                         href="/resources?is_free=true"
-                        className={`btn ${searchParams.is_free === 'true' ? 'btn-primary' : 'btn-secondary'}`}
+                        className={`btn ${query.is_free === 'true' ? 'btn-primary' : 'btn-secondary'}`}
                     >
                         免费资源
-                    </a>
+                    </Link>
                 </div>
 
                 {/* Resource Grid */}
-                {resources.length > 0 ? (
+                {loadFailed ? (
+                    <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-8 text-center text-red-700">
+                        <p className="text-lg font-medium">资源列表加载失败</p>
+                        <p className="mt-2 text-sm">请检查网络连接，或稍后重新加载。</p>
+                        <a
+                            href={buildResourcesHref(query, page)}
+                            className="mt-5 inline-flex rounded-lg bg-red-700 px-4 py-2 font-medium text-white hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2"
+                        >
+                            重新加载
+                        </a>
+                    </div>
+                ) : resources.length > 0 ? (
                     <>
                         <div className="grid grid-4 gap-6 mb-8">
-                            {resources.map((resource: any) => (
+                            {resources.map((resource) => (
                                 <ResourceCard key={resource.id} resource={resource} />
                             ))}
                         </div>
@@ -92,34 +139,34 @@ export default async function ResourcesPage({ searchParams }: PageProps) {
                         {pages > 1 && (
                             <div className="flex justify-center gap-2">
                                 {page > 1 && (
-                                    <a
-                                        href={`/resources?page=${page - 1}`}
+                                    <Link
+                                        href={buildResourcesHref(query, page - 1)}
                                         className="btn btn-secondary"
                                     >
                                         上一页
-                                    </a>
+                                    </Link>
                                 )}
 
                                 {Array.from({ length: Math.min(5, pages) }, (_, i) => {
                                     const pageNum = i + 1;
                                     return (
-                                        <a
+                                        <Link
                                             key={pageNum}
-                                            href={`/resources?page=${pageNum}`}
+                                            href={buildResourcesHref(query, pageNum)}
                                             className={`btn ${page === pageNum ? 'btn-primary' : 'btn-secondary'}`}
                                         >
                                             {pageNum}
-                                        </a>
+                                        </Link>
                                     );
                                 })}
 
                                 {page < pages && (
-                                    <a
-                                        href={`/resources?page=${page + 1}`}
+                                    <Link
+                                        href={buildResourcesHref(query, page + 1)}
                                         className="btn btn-secondary"
                                     >
                                         下一页
-                                    </a>
+                                    </Link>
                                 )}
                             </div>
                         )}

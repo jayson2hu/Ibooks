@@ -1,11 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import Link from 'next/link';
+import { api, getApiErrorMessage } from '@/lib/api';
 
 export default function AdminLoginPage() {
-    const router = useRouter();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -19,19 +18,22 @@ export default function AdminLoginPage() {
         try {
             const response = await api.auth.adminLogin({ email, password });
 
-            const { access_token, user } = response.data;
+            const { access_token, refresh_token, user } = response.data;
 
             if (!access_token) {
-                throw new Error('No access token received');
+                setError('登录响应无效，请稍后重试');
+                return;
             }
 
             localStorage.setItem('token', access_token);
+            if (refresh_token) {
+                localStorage.setItem('refresh_token', refresh_token);
+            }
             localStorage.setItem('user_role', user.role);
 
             window.location.href = '/admin';
-        } catch (err: any) {
-            const errorMessage = err.response?.data?.detail || err.message || '登录失败，请检查邮箱和密码';
-            setError(errorMessage);
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '登录失败，请检查邮箱和密码'));
         } finally {
             setIsLoading(false);
         }
@@ -119,19 +121,9 @@ export default function AdminLoginPage() {
                     </button>
                 </form>
 
-                {/* Development Help */}
-                {process.env.NODE_ENV === 'development' && (
-                    <div className="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                        <p className="text-xs text-purple-800 font-medium mb-1">开发环境 - 默认账号：</p>
-                        <p className="text-xs text-purple-700 font-mono">
-                            admin@example.com / Admin123
-                        </p>
-                    </div>
-                )}
-
                 {/* Back to Home */}
                 <div className="mt-6 text-center">
-                    <a
+                    <Link
                         href="/"
                         className="text-sm text-gray-600 hover:text-gray-900 transition-colors inline-flex items-center gap-1"
                     >
@@ -139,7 +131,7 @@ export default function AdminLoginPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                         </svg>
                         返回首页
-                    </a>
+                    </Link>
                 </div>
             </div>
         </div>

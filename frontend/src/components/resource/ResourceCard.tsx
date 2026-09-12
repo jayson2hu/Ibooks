@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import ResourceCover from '@/components/common/ResourceCover';
 import type { Resource } from '@/types';
 
 interface ResourceCardProps {
@@ -10,17 +11,11 @@ export default function ResourceCard({ resource }: ResourceCardProps) {
         <Link href={`/resources/${resource.slug}`} className="card group">
             {/* Cover Image */}
             <div className="relative h-48 bg-gray-200 rounded-lg overflow-hidden mb-4">
-                {resource.cover_image_url ? (
-                    <img
-                        src={resource.cover_image_url}
-                        alt={resource.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl">
-                        📁
-                    </div>
-                )}
+                <ResourceCover
+                    src={resource.cover_image_url}
+                    alt={resource.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
 
                 {/* Badges */}
                 <div className="absolute top-2 left-2 flex gap-2">
@@ -75,7 +70,7 @@ export default function ResourceCard({ resource }: ResourceCardProps) {
                         <span className="font-bold text-success">免费</span>
                     ) : (
                         <span className="font-bold text-primary">
-                            ¥{resource.price}
+                            {resource.coin_price} 书币
                         </span>
                     )}
                 </div>

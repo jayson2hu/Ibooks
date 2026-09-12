@@ -4,6 +4,7 @@ Tests for site settings APIs.
 import pytest
 from httpx import AsyncClient
 
+from app.api.v1 import settings as settings_api
 from app.database import AsyncSessionLocal
 from app.main import app
 from app.models.site_settings import SiteSetting
@@ -37,6 +38,7 @@ async def create_setting(
     *,
     category: str = "general",
     description: str | None = None,
+    updated_by: str | None = None,
 ) -> SiteSetting:
     """Create a site setting for API tests."""
     async with AsyncSessionLocal() as session:
@@ -45,6 +47,7 @@ async def create_setting(
             value=value,
             category=category,
             description=description,
+            updated_by=updated_by,
         )
         session.add(setting)
         await session.commit()
@@ -53,11 +56,19 @@ async def create_setting(
 
 
 @pytest.mark.asyncio
-async def test_public_settings_only_return_public_categories_and_support_filtering():
-    """Public settings expose only footer, general, and appearance categories."""
-    await create_setting("site_name", "Ibooks", category="general")
-    await create_setting("theme", "light", category="appearance")
-    await create_setting("copyright", "2026", category="footer")
+async def test_public_settings_only_return_allowlisted_keys_and_support_filtering():
+    """Category membership cannot accidentally make private values public."""
+    await create_setting(
+        "site_name",
+        "Ibooks",
+        category="general",
+        description="Public site title",
+        updated_by="seed-administrator",
+    )
+    await create_setting("admin_email", "private@example.com", category="general")
+    await create_setting("unknown_general", "private", category="general")
+    await create_setting("theme_mode", "light", category="appearance")
+    await create_setting("copyright_text", "2026", category="footer")
     await create_setting("signin_enabled", "true", category="signin")
 
     async with AsyncClient(app=app, base_url="http://test") as client:
@@ -65,20 +76,29 @@ async def test_public_settings_only_return_public_categories_and_support_filteri
         filtered_response = await client.get("/api/v1/settings", params={"category": "appearance"})
         private_filtered_response = await client.get("/api/v1/settings", params={"category": "signin"})
         detail_response = await client.get("/api/v1/settings/site_name")
+        private_general_response = await client.get("/api/v1/settings/admin_email")
         private_detail_response = await client.get("/api/v1/settings/signin_enabled")
 
     assert response.status_code == 200
-    assert {item["key"] for item in response.json()} == {"site_name", "theme", "copyright"}
+    assert {item["key"] for item in response.json()} == {
+        "site_name",
+        "theme_mode",
+        "copyright_text",
+    }
 
     assert filtered_response.status_code == 200
-    assert [item["key"] for item in filtered_response.json()] == ["theme"]
+    assert [item["key"] for item in filtered_response.json()] == ["theme_mode"]
 
     assert private_filtered_response.status_code == 200
     assert private_filtered_response.json() == []
 
     assert detail_response.status_code == 200
-    assert detail_response.json()["value"] == "Ibooks"
+    assert detail_response.json() == {"key": "site_name", "value": "Ibooks"}
+    assert private_general_response.status_code == 404
     assert private_detail_response.status_code == 404
+
+    for item in response.json():
+        assert set(item) == {"key", "value"}
 
 
 @pytest.mark.asyncio
@@ -106,11 +126,109 @@ async def test_regular_user_cannot_access_admin_settings_endpoints():
             json={"settings": [{"key": "site_name", "value": "Blocked"}]},
             headers={"Authorization": f"Bearer {token}"},
         )
+        test_email_response = await client.post(
+            "/api/v1/settings/test-email",
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
     assert admin_response.status_code == 403
     assert grouped_response.status_code == 403
     assert update_response.status_code == 403
     assert batch_response.status_code == 403
+    assert test_email_response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_anonymous_user_cannot_send_test_email():
+    """Anonymous callers cannot exercise the SMTP integration."""
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post("/api/v1/settings/test-email")
+
+    assert response.status_code in {401, 403}
+
+
+@pytest.mark.asyncio
+async def test_admin_test_email_uses_current_admin_and_fixed_content(monkeypatch):
+    """The endpoint never accepts an arbitrary recipient or message body."""
+    admin, token = await create_user("smtp-admin@example.com", UserRole.ADMIN)
+    messages: list[dict[str, str]] = []
+
+    async def capture_email(to: str, subject: str, html_body: str) -> bool:
+        messages.append({"to": to, "subject": subject, "html_body": html_body})
+        return True
+
+    monkeypatch.setattr(settings_api.email_utils, "send_email", capture_email)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/settings/test-email",
+            json={
+                "to": "attacker@example.com",
+                "subject": "Untrusted subject",
+                "html_body": "<script>alert('xss')</script>",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "测试邮件已发送到当前管理员邮箱"}
+    assert messages == [
+        {
+            "to": admin.email,
+            "subject": settings_api.TEST_EMAIL_SUBJECT,
+            "html_body": settings_api.TEST_EMAIL_BODY,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_mode", ["not_configured", "unexpected_error"])
+async def test_admin_test_email_returns_safe_503_on_delivery_failure(
+    monkeypatch,
+    caplog,
+    failure_mode: str,
+):
+    """Configuration and provider failures share a credential-safe response."""
+    _, token = await create_user(
+        f"smtp-failure-{failure_mode}@example.com",
+        UserRole.ADMIN,
+    )
+
+    if failure_mode == "not_configured":
+        monkeypatch.setattr(settings_api.email_utils.settings, "EMAIL_FROM", "")
+        monkeypatch.setattr(settings_api.email_utils.settings, "EMAIL_USERNAME", "")
+        monkeypatch.setattr(settings_api.email_utils.settings, "EMAIL_PASSWORD", "")
+
+        def unexpected_smtp_call(to: str, subject: str, html_body: str) -> None:
+            raise AssertionError("SMTP must not be called without credentials")
+
+        monkeypatch.setattr(
+            settings_api.email_utils,
+            "_send_email_sync",
+            unexpected_smtp_call,
+        )
+    else:
+        async def fail_email(to: str, subject: str, html_body: str) -> bool:
+            raise RuntimeError(
+                "smtp-password=secret recipient=private@example.com internal-host=smtp.local"
+            )
+
+        monkeypatch.setattr(settings_api.email_utils, "send_email", fail_email)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/settings/test-email",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": settings_api.TEST_EMAIL_FAILURE_MESSAGE}
+    observable_text = response.text + " ".join(
+        f"{record.getMessage()} {record.__dict__}" for record in caplog.records
+    )
+    assert "smtp-password" not in observable_text
+    assert "private@example.com" not in observable_text
+    assert "smtp.local" not in observable_text
 
 
 @pytest.mark.asyncio
@@ -150,7 +268,7 @@ async def test_admin_can_update_existing_setting_and_missing_setting_returns_404
     async with AsyncClient(app=app, base_url="http://test") as client:
         response = await client.put(
             "/api/v1/settings/site_name",
-            json={"value": "Ibooks Pro"},
+            json={"value": "Ibooks Pro", "updated_by": "spoofed-operator"},
             headers={"Authorization": f"Bearer {token}"},
         )
         missing_response = await client.put(
@@ -162,6 +280,7 @@ async def test_admin_can_update_existing_setting_and_missing_setting_returns_404
     assert response.status_code == 200
     assert response.json()["value"] == "Ibooks Pro"
     assert response.json()["updated_by"] == admin.username
+    assert response.json()["updated_by"] != "spoofed-operator"
     assert missing_response.status_code == 404
 
 

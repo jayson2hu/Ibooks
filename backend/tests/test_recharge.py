@@ -2,11 +2,10 @@
 Tests for recharge packages and orders.
 """
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
 from app.main import app
@@ -82,7 +81,11 @@ async def create_recharge_order(
             amount=Decimal("10.00"),
             payment_method=RechargePaymentMethod.ALIPAY,
             status=status,
-            paid_at=datetime.utcnow() if status == RechargeOrderStatus.PAID else None,
+            paid_at=(
+                datetime.now(timezone.utc).replace(tzinfo=None)
+                if status == RechargeOrderStatus.PAID
+                else None
+            ),
         )
         session.add(order)
         await session.commit()
@@ -162,6 +165,23 @@ async def test_create_recharge_order_rejects_invalid_package_config():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "充值套餐配置无效"
+
+
+@pytest.mark.asyncio
+async def test_create_recharge_order_rejects_unavailable_wechat_payment():
+    """Users cannot create an order for a payment channel with no payment flow."""
+    _, token = await create_user_and_token("wechat-unavailable@example.com")
+    package = await create_package()
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/recharge/orders",
+            json={"package_id": package.id, "payment_method": "wechat"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "微信支付暂未开放，请使用支付宝"
 
 
 @pytest.mark.asyncio

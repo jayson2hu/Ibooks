@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, getApiErrorMessage } from '@/lib/api';
 import type { RechargePackage } from '@/types';
 
 const EMPTY_FORM = {
@@ -26,8 +26,8 @@ export default function AdminRechargePackagesPage() {
         try {
             const response = await api.admin.getRechargePackages();
             setPackages(response.data || []);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '充值套餐加载失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '充值套餐加载失败'));
         } finally {
             setLoading(false);
         }
@@ -52,8 +52,8 @@ export default function AdminRechargePackagesPage() {
             });
             setForm(EMPTY_FORM);
             await loadPackages();
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '充值套餐保存失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '充值套餐保存失败'));
         } finally {
             setSaving(false);
         }
@@ -64,8 +64,8 @@ export default function AdminRechargePackagesPage() {
         try {
             await api.admin.updateRechargePackage(item.id, { is_active: !item.is_active });
             await loadPackages();
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '套餐状态更新失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '套餐状态更新失败'));
         }
     };
 

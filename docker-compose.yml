@@ -1,19 +1,21 @@
-version: '3.8'
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "${LOG_MAX_SIZE:-10m}"
+    max-file: "${LOG_MAX_FILES:-5}"
 
 services:
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: ibooks_postgres
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: resource_marketplace
       POSTGRES_USER: admin
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d resource_marketplace"]
       interval: 10s
@@ -25,13 +27,11 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: ibooks_redis
     restart: unless-stopped
+    logging: *default-logging
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -40,35 +40,123 @@ services:
     networks:
       - ibooks_network
 
+  # Database metrics exporters stay on the private Compose network.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_NAME: "postgresql://admin:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres:5432/resource_marketplace?sslmode=disable"
+    healthcheck:
+      test: ["CMD", "/bin/busybox", "wget", "--spider", "-q", "http://localhost:9187/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ibooks_network
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.67.0
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "/bin/busybox", "wget", "--spider", "-q", "http://localhost:9121/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ibooks_network
+
+  # Named volumes are initialized explicitly so the non-root backend can also
+  # reuse volumes created by an older/root-running deployment.
+  backend-volume-init:
+    image: redis:7-alpine
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    logging: *default-logging
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - >-
+        chown -R 10001:10001
+        /app/logs /app/static_pages /app/uploads
+    volumes:
+      - backend_logs:/app/logs
+      - static_pages:/app/static_pages
+      - uploads:/app/uploads
+
   # FastAPI Backend
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: ibooks_backend
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      backend-volume-init:
+        condition: service_completed_successfully
     environment:
-      - DATABASE_URL=postgresql+asyncpg://admin:${DB_PASSWORD:-changeme}@postgres:5432/resource_marketplace
-      - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
-      - MONITOR_PERFORMANCE=true
-      - MONITOR_AUDIT=true
-      - LOG_LEVEL=INFO
-      - SITE_URL=http://localhost
+      DATABASE_URL: postgresql+asyncpg://admin:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@postgres:5432/resource_marketplace
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env}
+      # Production defaults to false; local Docker runs may explicitly opt in.
+      DEBUG: ${DEBUG:-false}
+      SCHEMA_BOOTSTRAP_ENABLED: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set in .env}
+      MONITOR_PERFORMANCE: "true"
+      MONITOR_AUDIT: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: /app/logs
+      STATIC_PAGES_DIR: /app/static_pages
+      UPLOAD_DIR: /app/uploads
+      SITE_URL: ${SITE_URL:?SITE_URL must be set in .env}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:?API_PUBLIC_URL must be set in .env}
+      SEO_AUTO_GENERATE: ${SEO_AUTO_GENERATE:-true}
+      SEO_SUBMIT_BAIDU: ${SEO_SUBMIT_BAIDU:-false}
+      SEO_SUBMIT_GOOGLE: ${SEO_SUBMIT_GOOGLE:-false}
+      SEO_SUBMIT_360: ${SEO_SUBMIT_360:-false}
+      BAIDU_API_KEY: ${BAIDU_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:-smtp.gmail.com}
+      EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-587}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      EMAIL_USERNAME: ${EMAIL_USERNAME:-}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
+      ALIPAY_APP_ID: ${ALIPAY_APP_ID:-}
+      ALIPAY_PRIVATE_KEY: ${ALIPAY_PRIVATE_KEY:-}
+      ALIPAY_PUBLIC_KEY: ${ALIPAY_PUBLIC_KEY:-}
+      ALIPAY_SANDBOX: ${ALIPAY_SANDBOX:?ALIPAY_SANDBOX must be explicitly true or false}
+      CRAWLER_SCHEDULER_ENABLED: ${CRAWLER_SCHEDULER_ENABLED:-true}
     volumes:
-      - ./logs/backend:/app/logs
-      - ./static_pages:/app/static_pages
-      - ./uploads:/app/uploads
+      - backend_logs:/app/logs
+      - static_pages:/app/static_pages
+      - uploads:/app/uploads
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
-      - "8000:8000"
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - ibooks_network
 
@@ -77,86 +165,146 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: ibooks_frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${API_PUBLIC_URL:?API_PUBLIC_URL must be set in .env}
+        NEXT_PUBLIC_SITE_URL: ${SITE_URL:?SITE_URL must be set in .env}
+        INTERNAL_API_URL: http://backend:8000
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000
-      - NEXT_PUBLIC_SITE_URL=http://localhost:3000
+      NEXT_PUBLIC_API_URL: ${API_PUBLIC_URL:?API_PUBLIC_URL must be set in .env}
+      INTERNAL_API_URL: http://backend:8000
+      NEXT_PUBLIC_SITE_URL: ${SITE_URL:?SITE_URL must be set in .env}
     ports:
-      - "3000:3000"
+      - "${FRONTEND_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - ibooks_network
 
   # Prometheus Monitoring
   prometheus:
-    image: prom/prometheus:latest
-    container_name: ibooks_prometheus
+    image: prom/prometheus:v2.53.5
     restart: unless-stopped
+    logging: *default-logging
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}'
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
+      - "${MONITORING_BIND_ADDRESS:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "/bin/busybox", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      backend:
+        condition: service_healthy
+      postgres-exporter:
+        condition: service_healthy
+      redis-exporter:
+        condition: service_healthy
     networks:
       - ibooks_network
 
   # Grafana Dashboard
   grafana:
-    image: grafana/grafana:latest
-    container_name: ibooks_grafana
+    image: grafana/grafana:11.5.2
     restart: unless-stopped
+    logging: *default-logging
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
       - grafana_data:/var/lib/grafana
     ports:
-      - "3001:3000"
+      - "${MONITORING_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3001}:3000"
+    healthcheck:
+      test: ["CMD", "/usr/bin/curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
     networks:
       - ibooks_network
 
   # Loki Log Aggregation
   loki:
-    image: grafana/loki:latest
-    container_name: ibooks_loki
+    image: grafana/loki:3.4.2
     restart: unless-stopped
-    command: -config.file=/etc/loki/loki-config.yml
+    logging: *default-logging
+    command:
+      - '-config.file=/etc/loki/loki-config.yml'
+      - '-config.expand-env=true'
+    environment:
+      LOKI_RETENTION: ${LOKI_RETENTION:-168h}
     volumes:
       - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml
-      - loki_data:/loki
-    ports:
-      - "3100:3100"
+      # TSDB v13 intentionally uses a fresh volume; legacy boltdb data remains
+      # untouched in the old loki_data volume for manual export or removal.
+      - loki_tsdb_data:/loki
+    healthcheck:
+      # The distroless image guarantees the Loki binary, but not a stable HTTP
+      # client path. A running container plus this probe provides liveness;
+      # Promtail retries delivery until Loki's HTTP endpoint is ready.
+      test: ["CMD", "/usr/bin/loki", "-version"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     networks:
       - ibooks_network
 
   # Promtail Log Collector
   promtail:
-    image: grafana/promtail:latest
-    container_name: ibooks_promtail
+    image: grafana/promtail:3.4.2
     restart: unless-stopped
+    logging: *default-logging
     command: -config.file=/etc/promtail/promtail-config.yml
     volumes:
-      - ./logs:/var/log
+      - backend_logs:/var/log/backend:ro
       - ./monitoring/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml
+    healthcheck:
+      # The upstream Ubuntu image guarantees /usr/bin/promtail; it does not
+      # explicitly install curl/wget, so keep the probe dependency-free.
+      test: ["CMD", "/usr/bin/promtail", "-version"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     depends_on:
-      - loki
+      loki:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     networks:
       - ibooks_network
 
 volumes:
   postgres_data:
   redis_data:
+  backend_logs:
+  static_pages:
+  uploads:
   prometheus_data:
   grafana_data:
-  loki_data:
+  loki_tsdb_data:
 
 networks:
   ibooks_network:

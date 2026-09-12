@@ -1,13 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { api } from '@/lib/api';
-import apiClient from '@/lib/api'; // Direct access for upload
+import apiClient, { getApiErrorMessage } from '@/lib/api'; // Direct access for upload
+
+interface ImportResult {
+    message: string;
+    statistics: {
+        total: number;
+        success: number;
+        failed: number;
+        errors: string[];
+    };
+}
 
 export default function BulkImportPage() {
     const [file, setFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
-    const [result, setResult] = useState<any>(null);
+    const [result, setResult] = useState<ImportResult | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,15 +59,14 @@ export default function BulkImportPage() {
         formData.append('file', file);
 
         try {
-            const response = await apiClient.post('/bulk-import/upload', formData, {
+            const response = await apiClient.post<ImportResult>('/bulk-import/resources', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
             });
             setResult(response.data);
-        } catch (err: any) {
-            console.error('Upload failed:', err);
-            setError(err.response?.data?.detail || '上传失败，请检查文件格式');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '上传失败，请检查文件格式'));
         } finally {
             setUploading(false);
         }
@@ -82,7 +90,7 @@ export default function BulkImportPage() {
                         <ul className="list-disc list-inside text-sm text-gray-500 mb-4 space-y-1">
                             <li>红色标题列为必填项</li>
                             <li>分类名称必须存在于系统中</li>
-                            <li>价格请填写数字（0表示免费）</li>
+                            <li>书币价格请填写非负整数（0表示免费）</li>
                             <li>多个标签请用逗号分隔</li>
                         </ul>
                         <button
@@ -172,19 +180,19 @@ export default function BulkImportPage() {
                         <div>
                             <p className="font-semibold">导入完成</p>
                             <p className="text-sm">
-                                成功导入: <b>{result.success_count}</b> 条，
-                                失败: <b>{result.error_count}</b> 条
+                                成功导入: <b>{result.statistics.success}</b> 条，
+                                失败: <b>{result.statistics.failed}</b> 条
                             </p>
                         </div>
                     </div>
 
-                    {result.errors && result.errors.length > 0 && (
+                    {result.statistics.errors.length > 0 && (
                         <div className="mt-4 bg-white p-4 rounded border border-green-200 text-sm">
                             <p className="font-semibold text-red-600 mb-2">错误详情：</p>
                             <ul className="list-disc list-inside space-y-1 text-gray-600 max-h-40 overflow-y-auto">
-                                {result.errors.map((err: any, idx: number) => (
+                                {result.statistics.errors.map((err, idx) => (
                                     <li key={idx}>
-                                        第 {err.row} 行: {err.message}
+                                        {err}
                                     </li>
                                 ))}
                             </ul>

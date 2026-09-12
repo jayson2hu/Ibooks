@@ -2,14 +2,16 @@ import { api } from '@/lib/api';
 import type { Metadata } from 'next';
 import {
     QuestionMarkCircleIcon,
-    ChevronDownIcon,
-    MagnifyingGlassIcon
+    ChevronDownIcon
 } from '@heroicons/react/24/outline';
+import RetryableError from '@/components/common/RetryableError';
 
 export const metadata: Metadata = {
     title: '常见问题 - FAQ',
     description: '常见问题解答 - 帮助您快速找到答案',
 };
+
+export const dynamic = 'force-dynamic';
 
 interface FAQ {
     id: number;
@@ -22,16 +24,14 @@ interface FAQ {
 
 export default async function FAQPage() {
     let faqs: FAQ[] = [];
-    let categories: string[] = [];
+    let loadFailed = false;
 
     try {
         const response = await api.faqs.list(true);
         faqs = response.data || [];
-
-        // Extract unique categories
-        categories = Array.from(new Set(faqs.map(faq => faq.category)));
     } catch (error) {
         console.error('Failed to fetch FAQs:', error);
+        loadFailed = true;
     }
 
     // Group FAQs by category
@@ -66,7 +66,9 @@ export default async function FAQPage() {
 
                 {/* FAQ Content */}
                 <div className="max-w-4xl mx-auto">
-                    {faqs.length === 0 ? (
+                    {loadFailed ? (
+                        <RetryableError message="常见问题加载失败，请稍后重试。" />
+                    ) : faqs.length === 0 ? (
                         <div className="text-center py-20">
                             <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                                 <QuestionMarkCircleIcon className="w-8 h-8 text-gray-400" />

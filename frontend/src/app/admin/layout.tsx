@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import AdminSidebar from '@/components/admin/Sidebar';
 import AdminHeader from '@/components/admin/Header';
@@ -12,7 +13,10 @@ export default function AdminLayout({
 }) {
     const pathname = usePathname();
     const isLoginPage = pathname === '/admin/login';
-    const { isAuthenticated, isLoading } = useAdminAuth();
+    const { isAuthenticated, isLoading, role, canAccessRoute } = useAdminAuth();
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+
+    useEffect(() => setSidebarOpen(false), [pathname]);
 
     // Don't apply auth protection or layout to login page
     if (isLoginPage) {
@@ -21,7 +25,7 @@ export default function AdminLayout({
 
     // Show minimal loading state while checking authentication
     // This prevents the sidebar/layout from flashing before redirect
-    if (isLoading || !isAuthenticated) {
+    if (isLoading || !isAuthenticated || !canAccessRoute) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="text-center">
@@ -34,10 +38,10 @@ export default function AdminLayout({
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <AdminSidebar />
-            <div className="ml-64">
-                <AdminHeader />
-                <main className="p-8">
+            <AdminSidebar role={role} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            <div className="md:ml-64">
+                <AdminHeader role={role} onMenuOpen={() => setSidebarOpen(true)} />
+                <main className="p-4 sm:p-8">
                     {children}
                 </main>
             </div>

@@ -2,33 +2,103 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, getApiErrorMessage } from '@/lib/api';
+import type { Category, ResourceDetail } from '@/types';
 
 interface ResourceFormProps {
-    initialData?: any;
+    initialData?: Partial<ResourceDetail>;
     isEdit?: boolean;
+}
+
+interface ResourceFormData {
+    title: string;
+    slug: string;
+    description: string;
+    category_id: number | '';
+    price: number | string;
+    coin_price: number | string;
+    original_price: number | string;
+    cloud_link: string;
+    backup_links: string;
+    access_code: string;
+    tags: string;
+    is_published: boolean;
+    is_featured: boolean;
+    cover_image_url: string;
+    preview_images: string;
+}
+
+type MultiUrlField = 'backup_links' | 'preview_images';
+type ResourceFormErrors = Partial<Record<MultiUrlField, string>>;
+
+const MAX_RESOURCE_URLS = 20;
+const MAX_RESOURCE_URL_LENGTH = 2048;
+
+function parseAndValidateUrlLines(value: string, label: string): { urls: string[]; error?: string } {
+    const urls = value
+        .split(/\r?\n/)
+        .map((url) => url.trim())
+        .filter(Boolean);
+
+    if (urls.length > MAX_RESOURCE_URLS) {
+        return { urls, error: `${label}最多填写 ${MAX_RESOURCE_URLS} 条` };
+    }
+
+    const seen = new Set<string>();
+    for (const [index, url] of urls.entries()) {
+        if (url.length > MAX_RESOURCE_URL_LENGTH) {
+            return { urls, error: `${label}第 ${index + 1} 行不能超过 ${MAX_RESOURCE_URL_LENGTH} 个字符` };
+        }
+        if (/\s/.test(url) || !/^https?:\/\/[^/?#]+(?:[/?#]|$)/i.test(url)) {
+            return { urls, error: `${label}第 ${index + 1} 行必须是有效的 HTTP/HTTPS URL` };
+        }
+
+        try {
+            const parsed = new URL(url);
+            if (
+                !['http:', 'https:'].includes(parsed.protocol)
+                || !parsed.hostname
+                || parsed.username
+                || parsed.password
+            ) {
+                return { urls, error: `${label}第 ${index + 1} 行必须是无账号凭据的 HTTP/HTTPS URL` };
+            }
+        } catch {
+            return { urls, error: `${label}第 ${index + 1} 行必须是有效的 HTTP/HTTPS URL` };
+        }
+
+        if (seen.has(url)) {
+            return { urls, error: `${label}不能包含重复 URL` };
+        }
+        seen.add(url);
+    }
+
+    return { urls };
 }
 
 export default function ResourceForm({ initialData, isEdit }: ResourceFormProps) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
-    const [categories, setCategories] = useState<any[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [fieldErrors, setFieldErrors] = useState<ResourceFormErrors>({});
 
-    const [formData, setFormData] = useState<any>({
-        title: '',
-        slug: '',
-        description: '',
-        category_id: '',
-        price: 0,
-        original_price: 0,
-        cloud_link: '',
-        cloud_code: '',
-        tags: '',
-        is_published: true,
-        is_featured: false,
-        cover_image_url: '',
-        ...initialData
-    });
+    const [formData, setFormData] = useState<ResourceFormData>(() => ({
+        title: initialData?.title || '',
+        slug: initialData?.slug || '',
+        description: initialData?.description || '',
+        category_id: initialData?.category_id ?? '',
+        price: initialData?.price ?? 0,
+        coin_price: initialData?.coin_price ?? 0,
+        original_price: initialData?.original_price ?? 0,
+        cloud_link: initialData?.cloud_link || '',
+        backup_links: initialData?.backup_links?.join('\n') || '',
+        access_code: initialData?.access_code || '',
+        tags: initialData?.tags?.join(', ') || '',
+        is_published: initialData?.is_published ?? true,
+        is_featured: initialData?.is_featured ?? false,
+        cover_image_url: initialData?.cover_image_url || '',
+        preview_images: initialData?.preview_images?.join('\n') || '',
+    }));
 
     useEffect(() => {
         // Fetch categories for dropdown
@@ -45,23 +115,40 @@ export default function ResourceForm({ initialData, isEdit }: ResourceFormProps)
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
-        setFormData((prev: any) => ({
+        setFormData((prev) => ({
             ...prev,
             [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
         }));
+        if (name === 'backup_links' || name === 'preview_images') {
+            setFieldErrors((current) => ({ ...current, [name]: undefined }));
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const backupLinks = parseAndValidateUrlLines(formData.backup_links, '备用网盘链接');
+        const previewImages = parseAndValidateUrlLines(formData.preview_images, '预览图片 URL');
+        const nextErrors: ResourceFormErrors = {
+            backup_links: backupLinks.error,
+            preview_images: previewImages.error,
+        };
+        setFieldErrors(nextErrors);
+        if (backupLinks.error || previewImages.error) {
+            return;
+        }
+
         setLoading(true);
 
         try {
             const payload = {
                 ...formData,
                 price: Number(formData.price),
+                coin_price: Number(formData.coin_price),
                 original_price: Number(formData.original_price),
                 category_id: Number(formData.category_id),
-                tags: typeof formData.tags === 'string' ? formData.tags.split(',').map((t: string) => t.trim()) : formData.tags
+                tags: typeof formData.tags === 'string' ? formData.tags.split(',').map((t: string) => t.trim()) : formData.tags,
+                backup_links: backupLinks.urls,
+                preview_images: previewImages.urls,
             };
 
             if (isEdit && initialData?.id) {
@@ -71,9 +158,8 @@ export default function ResourceForm({ initialData, isEdit }: ResourceFormProps)
             }
 
             router.push('/admin/resources');
-        } catch (error) {
-            console.error('Submit failed:', error);
-            alert('保存失败，请检查表单');
+        } catch (error: unknown) {
+            alert(getApiErrorMessage(error, '保存失败，请检查表单'));
         } finally {
             setLoading(false);
         }
@@ -88,8 +174,9 @@ export default function ResourceForm({ initialData, isEdit }: ResourceFormProps)
                 </div>
 
                 <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">资源标题</label>
+                    <label htmlFor="resource-title" className="block text-sm font-medium text-gray-700 mb-1">资源标题</label>
                     <input
+                        id="resource-title"
                         type="text"
                         name="title"
                         required
@@ -100,8 +187,9 @@ export default function ResourceForm({ initialData, isEdit }: ResourceFormProps)
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">分类</label>
+                    <label htmlFor="resource-category" className="block text-sm font-medium text-gray-700 mb-1">分类</label>
                     <select
+                        id="resource-category"
                         name="category_id"
                         required
                         value={formData.category_id}
@@ -169,6 +257,19 @@ export default function ResourceForm({ initialData, isEdit }: ResourceFormProps)
                     />
                 </div>
 
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">售价 (书币)</label>
+                    <input
+                        type="number"
+                        name="coin_price"
+                        min="0"
+                        step="1"
+                        value={formData.coin_price}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    />
+                </div>
+
                 <div className="col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">网盘链接</label>
                     <input
@@ -181,12 +282,39 @@ export default function ResourceForm({ initialData, isEdit }: ResourceFormProps)
                     />
                 </div>
 
+                <div className="col-span-2">
+                    <label htmlFor="resource-backup-links" className="block text-sm font-medium text-gray-700 mb-1">
+                        备用网盘链接
+                    </label>
+                    <textarea
+                        id="resource-backup-links"
+                        name="backup_links"
+                        rows={4}
+                        value={formData.backup_links}
+                        onChange={handleChange}
+                        disabled={loading}
+                        aria-invalid={Boolean(fieldErrors.backup_links)}
+                        aria-describedby={fieldErrors.backup_links ? 'resource-backup-links-error' : 'resource-backup-links-help'}
+                        placeholder={'https://backup.example.com/resource\nhttps://mirror.example.com/resource'}
+                        className="w-full resize-y px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-gray-100"
+                    />
+                    {fieldErrors.backup_links ? (
+                        <p id="resource-backup-links-error" role="alert" className="mt-1 text-sm text-red-600">
+                            {fieldErrors.backup_links}
+                        </p>
+                    ) : (
+                        <p id="resource-backup-links-help" className="mt-1 text-xs text-gray-500">
+                            每行一个 HTTP/HTTPS URL，最多 20 条；留空可清除全部备用链接。
+                        </p>
+                    )}
+                </div>
+
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">提取码</label>
                     <input
                         type="text"
-                        name="cloud_code"
-                        value={formData.cloud_code}
+                        name="access_code"
+                        value={formData.access_code}
                         onChange={handleChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     />
@@ -201,6 +329,33 @@ export default function ResourceForm({ initialData, isEdit }: ResourceFormProps)
                         onChange={handleChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     />
+                </div>
+
+                <div className="col-span-2">
+                    <label htmlFor="resource-preview-images" className="block text-sm font-medium text-gray-700 mb-1">
+                        预览图片 URL
+                    </label>
+                    <textarea
+                        id="resource-preview-images"
+                        name="preview_images"
+                        rows={4}
+                        value={formData.preview_images}
+                        onChange={handleChange}
+                        disabled={loading}
+                        aria-invalid={Boolean(fieldErrors.preview_images)}
+                        aria-describedby={fieldErrors.preview_images ? 'resource-preview-images-error' : 'resource-preview-images-help'}
+                        placeholder={'https://images.example.com/preview-1.jpg\nhttps://images.example.com/preview-2.jpg'}
+                        className="w-full resize-y px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-gray-100"
+                    />
+                    {fieldErrors.preview_images ? (
+                        <p id="resource-preview-images-error" role="alert" className="mt-1 text-sm text-red-600">
+                            {fieldErrors.preview_images}
+                        </p>
+                    ) : (
+                        <p id="resource-preview-images-help" className="mt-1 text-xs text-gray-500">
+                            每行一个 HTTP/HTTPS 图片 URL，最多 20 条；保存顺序即展示顺序。
+                        </p>
+                    )}
                 </div>
 
                 {/* Settings */}

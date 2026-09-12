@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -18,6 +18,10 @@ import ResourceCard from '@/components/home/ResourceCard';
 import CategoryTabs from '@/components/home/CategoryTabs';
 import { ResourceGridSkeleton } from '@/components/home/SkeletonLoader';
 import { FeaturesSection } from '@/components/home/FeatureCard';
+import {
+    filterHomepageResources,
+    type HomepageResourceFilter,
+} from '@/lib/resourceFilters';
 
 interface Resource {
     id: number;
@@ -26,51 +30,60 @@ interface Resource {
     slug: string;
     resource_type: string;
     price: number;
+    coin_price?: number;
     is_free: boolean;
-    thumbnail_url?: string;
+    cover_image_url?: string;
+    view_count?: number;
     created_at?: string;
 }
 
+interface ResourceListEnvelope {
+    items?: Resource[];
+    data?: Resource[];
+}
+
+function extractResources(payload: unknown): Resource[] {
+    if (Array.isArray(payload)) {
+        return payload as Resource[];
+    }
+
+    if (payload && typeof payload === 'object') {
+        const envelope = payload as ResourceListEnvelope;
+        if (Array.isArray(envelope.items)) {
+            return envelope.items;
+        }
+        if (Array.isArray(envelope.data)) {
+            return envelope.data;
+        }
+    }
+
+    return [];
+}
+
 export default function HomePage() {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchScope, setSearchScope] = useState('all');
     const [featuredResources, setFeaturedResources] = useState<Resource[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState('all');
+    const [activeTab, setActiveTab] = useState<HomepageResourceFilter>('all');
     const router = useRouter();
 
-    useEffect(() => {
-        const fetchFeaturedResources = async () => {
-            try {
-                setError(null);
-                const response = await api.resources.list({ is_featured: true, page_size: 20 });
-                console.log('API Response:', response.data); // 调试日志
-                
-                // 处理不同的响应结构
-                let resources = [];
-                if (response.data.items && Array.isArray(response.data.items)) {
-                    resources = response.data.items;
-                } else if (Array.isArray(response.data)) {
-                    resources = response.data;
-                } else if (response.data.data && Array.isArray(response.data.data)) {
-                    resources = response.data.data;
-                } else {
-                    console.warn('Unexpected API response structure:', response.data);
-                    resources = [];
-                }
-                
-                setFeaturedResources(resources);
-            } catch (error) {
-                console.error('Failed to fetch featured resources:', error);
-                setError('加载资源失败，请稍后重试');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchFeaturedResources();
+    const fetchFeaturedResources = useCallback(async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const response = await api.resources.list({ is_featured: true, page_size: 20 });
+            setFeaturedResources(extractResources(response.data));
+        } catch (error) {
+            console.error('Failed to fetch featured resources:', error);
+            setError('加载资源失败，请稍后重试');
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchFeaturedResources();
+    }, [fetchFeaturedResources]);
 
     const handleSearch = (query: string, scope: string) => {
         if (query.trim()) {
@@ -79,34 +92,6 @@ export default function HomePage() {
     };
 
     const handleRetry = () => {
-        setLoading(true);
-        setError(null);
-        const fetchFeaturedResources = async () => {
-            try {
-                const response = await api.resources.list({ is_featured: true, page_size: 20 });
-                console.log('Retry API Response:', response.data); // 调试日志
-                
-                // 处理不同的响应结构
-                let resources = [];
-                if (response.data.items && Array.isArray(response.data.items)) {
-                    resources = response.data.items;
-                } else if (Array.isArray(response.data)) {
-                    resources = response.data;
-                } else if (response.data.data && Array.isArray(response.data.data)) {
-                    resources = response.data.data;
-                } else {
-                    console.warn('Unexpected API response structure:', response.data);
-                    resources = [];
-                }
-                
-                setFeaturedResources(resources);
-            } catch (error) {
-                console.error('Failed to fetch featured resources:', error);
-                setError('加载资源失败，请稍后重试');
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchFeaturedResources();
     };
 
@@ -139,14 +124,9 @@ export default function HomePage() {
     ];
 
     // 根据活动标签筛选资源
-    const filteredResources = Array.isArray(featuredResources) ? featuredResources.filter(resource => {
-        if (activeTab === 'all') return true;
-        if (activeTab === 'new') return true; // 可以根据创建时间排序
-        if (activeTab === 'free') return resource.is_free || resource.price === 0;
-        if (activeTab === 'course') return resource.resource_type.includes('课程');
-        if (activeTab === 'ebook') return resource.resource_type.includes('电子书');
-        return true;
-    }) : [];
+    const filteredResources = Array.isArray(featuredResources)
+        ? filterHomepageResources(featuredResources, activeTab)
+        : [];
 
     return (
         <>
@@ -189,7 +169,7 @@ export default function HomePage() {
                             <CategoryTabs
                                 tabs={categoryTabs}
                                 activeTab={activeTab}
-                                onChange={setActiveTab}
+                                onChange={(tab) => setActiveTab(tab as HomepageResourceFilter)}
                             />
                         </motion.div>
                     </div>

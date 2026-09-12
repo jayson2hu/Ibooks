@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 import enum
 from app.database import Base
+from app.utils.datetime_utils import utc_now
 
 
 class ContactType(str, enum.Enum):
@@ -66,11 +67,11 @@ class Contact(Base):
     show_in_sidebar: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False
     )
     

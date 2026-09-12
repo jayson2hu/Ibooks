@@ -3,13 +3,12 @@ Structured logging configuration with JSON formatting.
 """
 import logging
 import logging.handlers
-import json
 import sys
 from pathlib import Path
-from datetime import datetime
 from typing import Any, Dict
 from pythonjsonlogger import jsonlogger
 from app.config import settings
+from app.utils.datetime_utils import utc_now
 
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
@@ -20,7 +19,7 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
         super().add_fields(log_record, record, message_dict)
         
         # Add timestamp in ISO format
-        log_record['timestamp'] = datetime.utcnow().isoformat() + 'Z'
+        log_record['timestamp'] = utc_now().isoformat() + 'Z'
         
         # Add log level
         log_record['level'] = record.levelname

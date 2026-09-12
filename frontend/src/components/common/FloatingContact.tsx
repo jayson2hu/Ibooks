@@ -7,8 +7,7 @@ import {
     XMarkIcon,
     PhoneIcon,
     EnvelopeIcon,
-    ChatBubbleOvalLeftEllipsisIcon,
-    DevicePhoneMobileIcon
+    ChatBubbleOvalLeftEllipsisIcon
 } from '@heroicons/react/24/outline';
 import { api } from '@/lib/api';
 import CopyButton from './CopyButton';
@@ -23,6 +22,7 @@ interface Contact {
     link_url?: string;
     qr_code_url?: string;
     description?: string;
+    show_in_header: boolean;
 }
 
 export default function FloatingContact() {
@@ -35,7 +35,7 @@ export default function FloatingContact() {
         const fetchContacts = async () => {
             try {
                 const response = await api.contacts.list(true);
-                setContacts(response.data || []);
+                setContacts((response.data || []).filter((contact: Contact) => contact.show_in_header));
             } catch (error) {
                 console.error('Failed to fetch contacts:', error);
             } finally {
@@ -69,7 +69,7 @@ export default function FloatingContact() {
             drag
             dragMomentum={false}
             dragConstraints={{ left: -1000, right: 0, top: -1000, bottom: 0 }}
-            className="fixed bottom-8 right-8 z-[100]"
+            className="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 z-[100]"
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
         >
@@ -80,7 +80,7 @@ export default function FloatingContact() {
                             initial={{ opacity: 0, y: 20, scale: 0.95 }}
                             animate={{ opacity: 1, y: -16, scale: 1 }}
                             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                            className="absolute bottom-full right-0 mb-4 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden w-72 origin-bottom-right"
+                            className="absolute bottom-full right-0 mb-4 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden w-72 max-w-[calc(100vw-2rem)] origin-bottom-right"
                         >
                             <div className="p-4 bg-gradient-to-r from-blue-600 to-indigo-600">
                                 <h3 className="text-white font-semibold">联系我们</h3>
@@ -99,6 +99,8 @@ export default function FloatingContact() {
 
                                                 {contact.type === 'wechat_qr' && contact.qr_code_url ? (
                                                     <div className="mt-2 text-center bg-white p-2 rounded border border-gray-200">
+                                                        {/* User-configured QR URLs can come from arbitrary external hosts. */}
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
                                                         <img src={contact.qr_code_url} alt={contact.label} className="w-24 h-24 mx-auto" />
                                                         <p className="text-xs text-gray-400 mt-1">扫码添加</p>
                                                     </div>

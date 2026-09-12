@@ -59,6 +59,7 @@ async def create_package_and_order(
     *,
     status: RechargeOrderStatus = RechargeOrderStatus.PENDING,
     recharge_no: str = "RCHPAYPENDING",
+    payment_method: RechargePaymentMethod = RechargePaymentMethod.ALIPAY,
 ) -> RechargeOrder:
     """Create a recharge package and order."""
     async with AsyncSessionLocal() as session:
@@ -80,7 +81,7 @@ async def create_package_and_order(
             coins=100,
             bonus_coins=20,
             amount=Decimal("12.00"),
-            payment_method=RechargePaymentMethod.ALIPAY,
+            payment_method=payment_method,
             status=status,
         )
         session.add(order)
@@ -150,6 +151,28 @@ async def test_alipay_recharge_create_rejects_non_pending(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_alipay_recharge_create_rejects_mismatched_payment_channel(monkeypatch):
+    """A legacy WeChat order cannot be paid through the Alipay endpoint."""
+    user, token = await create_user_and_token("recharge-channel@example.com")
+    order = await create_package_and_order(
+        user.id,
+        recharge_no="RCHPAYCHANNEL",
+        payment_method=RechargePaymentMethod.WECHAT,
+    )
+    monkeypatch.setattr(recharge, "get_alipay_client", lambda: FakeAlipay())
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/recharge/alipay/create",
+            json={"recharge_no": order.recharge_no},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "充值订单支付渠道与支付宝不匹配"
+
+
+@pytest.mark.asyncio
 async def test_alipay_recharge_notify_success_marks_paid_and_adds_coins(monkeypatch):
     """Verified Alipay notification marks recharge paid and credits wallet."""
     user, _ = await create_user_and_token("notify-success@example.com")
@@ -163,6 +186,7 @@ async def test_alipay_recharge_notify_success_marks_paid_and_adds_coins(monkeypa
                 "out_trade_no": order.recharge_no,
                 "trade_no": "TRADE-RCH-1",
                 "trade_status": "TRADE_SUCCESS",
+                "total_amount": "12.00",
                 "sign": "valid-sign",
             },
         )
@@ -208,6 +232,7 @@ async def test_alipay_recharge_notify_is_idempotent(monkeypatch):
                     "out_trade_no": order.recharge_no,
                     "trade_no": "TRADE-RCH-2",
                     "trade_status": "TRADE_SUCCESS",
+                    "total_amount": "12.00",
                     "sign": "valid-sign",
                 },
             )
@@ -244,6 +269,7 @@ async def test_alipay_recharge_notify_verify_failure_does_not_update(monkeypatch
                 "out_trade_no": order.recharge_no,
                 "trade_no": "TRADE-RCH-FAIL",
                 "trade_status": "TRADE_SUCCESS",
+                "total_amount": "12.00",
                 "sign": "invalid-sign",
             },
         )
@@ -266,3 +292,139 @@ async def test_alipay_recharge_notify_verify_failure_does_not_update(monkeypatch
         assert updated.trade_no is None
         assert wallet.balance == 0
         assert ledgers == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload_override", "configured_app_id"),
+    [
+        ({"total_amount": "0.01"}, ""),
+        ({"total_amount": "invalid"}, ""),
+        ({"trade_no": ""}, ""),
+        ({"app_id": "unexpected-app"}, "expected-app"),
+    ],
+)
+async def test_alipay_recharge_notify_rejects_invalid_payment_identity(
+    monkeypatch,
+    payload_override,
+    configured_app_id,
+):
+    """A verified callback still cannot credit a mismatched payment."""
+    user, _ = await create_user_and_token(
+        f"notify-invalid-{abs(hash(str(payload_override)))}@example.com"
+    )
+    order = await create_package_and_order(
+        user.id,
+        recharge_no=f"RCHINVALID{abs(hash(str(payload_override)))}",
+    )
+    monkeypatch.setattr(recharge, "get_alipay_client", lambda: FakeAlipay(verify_result=True))
+    monkeypatch.setattr(recharge.settings, "ALIPAY_APP_ID", configured_app_id)
+    payload = {
+        "out_trade_no": order.recharge_no,
+        "trade_no": "TRADE-RCH-INVALID",
+        "trade_status": "TRADE_SUCCESS",
+        "total_amount": "12.00",
+        "app_id": configured_app_id,
+        "sign": "valid-sign",
+    }
+    payload.update(payload_override)
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post("/api/v1/recharge/alipay/notify", data=payload)
+
+    assert response.status_code == 200
+    assert response.text == "failure"
+
+    async with AsyncSessionLocal() as session:
+        updated = (await session.execute(
+            select(RechargeOrder).where(RechargeOrder.recharge_no == order.recharge_no)
+        )).scalar_one()
+        wallet = (await session.execute(
+            select(Wallet).where(Wallet.user_id == user.id)
+        )).scalar_one()
+
+        assert updated.status == RechargeOrderStatus.PENDING
+        assert updated.trade_no is None
+        assert wallet.balance == 0
+
+
+@pytest.mark.asyncio
+async def test_alipay_recharge_notify_rejects_conflicting_trade_for_paid_order(monkeypatch):
+    """A paid order cannot be acknowledged under a different Alipay trade number."""
+    user, _ = await create_user_and_token("notify-trade-conflict@example.com")
+    order = await create_package_and_order(user.id, recharge_no="RCHTRADECONFLICT")
+    monkeypatch.setattr(recharge, "get_alipay_client", lambda: FakeAlipay(verify_result=True))
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        first = await client.post(
+            "/api/v1/recharge/alipay/notify",
+            data={
+                "out_trade_no": order.recharge_no,
+                "trade_no": "TRADE-ORIGINAL",
+                "trade_status": "TRADE_SUCCESS",
+                "total_amount": "12.00",
+                "sign": "valid-sign",
+            },
+        )
+        conflicting = await client.post(
+            "/api/v1/recharge/alipay/notify",
+            data={
+                "out_trade_no": order.recharge_no,
+                "trade_no": "TRADE-CONFLICT",
+                "trade_status": "TRADE_SUCCESS",
+                "total_amount": "12.00",
+                "sign": "valid-sign",
+            },
+        )
+
+    assert first.text == "success"
+    assert conflicting.text == "failure"
+
+    async with AsyncSessionLocal() as session:
+        updated = (await session.execute(
+            select(RechargeOrder).where(RechargeOrder.recharge_no == order.recharge_no)
+        )).scalar_one()
+        ledgers = (await session.execute(
+            select(CoinLedger).where(CoinLedger.related_order_no == order.recharge_no)
+        )).scalars().all()
+
+        assert updated.trade_no == "TRADE-ORIGINAL"
+        assert len(ledgers) == 1
+
+
+@pytest.mark.asyncio
+async def test_alipay_success_after_local_cancellation_still_credits_wallet(monkeypatch):
+    """A delayed successful payment remains authoritative after local cancellation."""
+    user, _ = await create_user_and_token("notify-after-cancel@example.com")
+    order = await create_package_and_order(
+        user.id,
+        status=RechargeOrderStatus.CANCELLED,
+        recharge_no="RCHAFTERCANCEL",
+    )
+    monkeypatch.setattr(recharge, "get_alipay_client", lambda: FakeAlipay(verify_result=True))
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/recharge/alipay/notify",
+            data={
+                "out_trade_no": order.recharge_no,
+                "trade_no": "TRADE-AFTER-CANCEL",
+                "trade_status": "TRADE_SUCCESS",
+                "total_amount": "12.00",
+                "sign": "valid-sign",
+            },
+        )
+
+    assert response.text == "success"
+
+    async with AsyncSessionLocal() as session:
+        updated = (await session.execute(
+            select(RechargeOrder).where(RechargeOrder.recharge_no == order.recharge_no)
+        )).scalar_one()
+        wallet = (await session.execute(
+            select(Wallet).where(Wallet.user_id == user.id)
+        )).scalar_one()
+
+        assert updated.status == RechargeOrderStatus.PAID
+        assert updated.trade_no == "TRADE-AFTER-CANCEL"
+        assert wallet.balance == 120

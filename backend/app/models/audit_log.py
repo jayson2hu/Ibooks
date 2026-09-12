@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 import enum
 from app.database import Base
+from app.utils.datetime_utils import utc_now
 
 
 class AuditAction(str, enum.Enum):
@@ -86,7 +87,7 @@ class AuditLog(Base):
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False,
         index=True
     )

@@ -101,7 +101,7 @@ async def test_signin_reward_purchase_flow_grants_access():
     assert order_response.json()["coin_amount"] == 6
     assert wallet_response.json()["balance"] == 4
     assert access_response.status_code == 200
-    assert access_response.json()["cloud_link"] == "https://pan.example.com/e2e-signin-buy"
+    assert access_response.json() == {"has_access": True}
 
     async with AsyncSessionLocal() as session:
         order = (await session.execute(

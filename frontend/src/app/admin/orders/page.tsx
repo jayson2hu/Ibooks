@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { api } from '@/lib/api';
-import type { Order, OrderStatus, PaginatedResponse } from '@/types';
+import { api, getApiErrorMessage } from '@/lib/api';
+import type { Order, OrderStatus, PaymentMethod } from '@/types';
 
 const statusLabels: Record<OrderStatus, string> = {
     pending: '待支付',
@@ -19,10 +19,11 @@ const statusClasses: Record<OrderStatus, string> = {
     refunded: 'bg-blue-100 text-blue-700',
 };
 
-const paymentLabels: Record<string, string> = {
+const paymentLabels: Record<PaymentMethod, string> = {
     alipay: '支付宝',
     wechat: '微信支付',
     free: '免费资源',
+    coin: '书币',
 };
 
 function formatAmount(amount: number | string) {
@@ -51,7 +52,7 @@ export default function OrderManagement() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    const loadOrders = async (targetPage = page, targetStatus = status) => {
+    const loadOrders = useCallback(async (targetPage: number, targetStatus: string) => {
         setLoading(true);
         setError('');
         try {
@@ -63,27 +64,27 @@ export default function OrderManagement() {
                 params.status = targetStatus;
             }
             const response = await api.orders.adminList(params);
-            const data = response.data as PaginatedResponse<Order>;
+            const data = response.data;
             setOrders(data.items);
             setPage(data.page);
             setPages(data.pages);
             setTotal(data.total);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '订单加载失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '订单加载失败'));
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        loadOrders(1, status);
-    }, [status]);
+        void loadOrders(1, status);
+    }, [loadOrders, status]);
 
     const stats = useMemo(() => {
         const paidOrders = orders.filter((order) => order.status === 'paid');
         return {
             visible: orders.length,
-            revenue: paidOrders.reduce((sum, order) => sum + Number(order.amount || 0), 0),
+            spentCoins: paidOrders.reduce((sum, order) => sum + Number(order.coin_amount || 0), 0),
             pending: orders.filter((order) => order.status === 'pending').length,
             paid: paidOrders.length,
         };
@@ -108,8 +109,8 @@ export default function OrderManagement() {
                     <p className="text-2xl font-bold text-gray-900 mt-1">{total}</p>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <p className="text-sm text-gray-600">当前页收入</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">¥{stats.revenue.toFixed(2)}</p>
+                    <p className="text-sm text-gray-600">当前页消费书币</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.spentCoins} 书币</p>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <p className="text-sm text-gray-600">当前页待支付</p>
@@ -154,7 +155,7 @@ export default function OrderManagement() {
                                 <th className="px-6 py-4 font-medium text-gray-600">订单号</th>
                                 <th className="px-6 py-4 font-medium text-gray-600">用户</th>
                                 <th className="px-6 py-4 font-medium text-gray-600">资源</th>
-                                <th className="px-6 py-4 font-medium text-gray-600">金额</th>
+                                <th className="px-6 py-4 font-medium text-gray-600">书币</th>
                                 <th className="px-6 py-4 font-medium text-gray-600">支付方式</th>
                                 <th className="px-6 py-4 font-medium text-gray-600">状态</th>
                                 <th className="px-6 py-4 font-medium text-gray-600">创建时间</th>
@@ -194,7 +195,10 @@ export default function OrderManagement() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="font-bold text-orange-600">¥{formatAmount(order.amount)}</span>
+                                            <div className="font-bold text-orange-600">{order.coin_amount} 书币</div>
+                                            {Number(order.amount || 0) > 0 && (
+                                                <div className="mt-1 text-xs text-gray-400">历史金额 ¥{formatAmount(order.amount)}</div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className="text-sm text-gray-600">

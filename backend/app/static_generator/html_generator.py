@@ -1,9 +1,53 @@
 """
 HTML page generation for static SEO pages.
 """
-from jinja2 import Template
+import re
+from pathlib import Path
+
+from jinja2 import Environment, select_autoescape
 from typing import Dict, Any
 from app.config import settings
+
+
+RESOURCE_SLUG_MAX_LENGTH = 200
+_RESOURCE_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_HTML_ENVIRONMENT = Environment(
+    autoescape=select_autoescape(default_for_string=True, default=True),
+)
+
+
+def is_valid_resource_slug(slug: str) -> bool:
+    """Return whether a slug matches the format produced by ``generate_slug``."""
+    return (
+        isinstance(slug, str)
+        and bool(slug)
+        and len(slug) <= RESOURCE_SLUG_MAX_LENGTH
+        and _RESOURCE_SLUG_PATTERN.fullmatch(slug) is not None
+    )
+
+
+def get_resource_html_path(
+    slug: str,
+    static_pages_dir: str | Path | None = None,
+) -> Path:
+    """Resolve a generated resource page without allowing path traversal."""
+    if not is_valid_resource_slug(slug):
+        raise ValueError("Invalid resource slug")
+
+    configured_dir = (
+        settings.STATIC_PAGES_DIR
+        if static_pages_dir is None
+        else static_pages_dir
+    )
+    static_root = Path(configured_dir).expanduser().resolve()
+    resources_dir = (static_root / "resources").resolve()
+    if resources_dir.parent != static_root:
+        raise ValueError("Invalid generated resources directory")
+
+    output_path = (resources_dir / f"{slug}.html").resolve()
+    if output_path.parent != resources_dir:
+        raise ValueError("Invalid generated resource path")
+    return output_path
 
 
 # HTML template for resource detail page
@@ -31,22 +75,7 @@ RESOURCE_TEMPLATE = """
     <meta name="twitter:image" content="{{ cover_image_url }}">
     
     <!-- JSON-LD -->
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org/",
-        "@type": "Product",
-        "name": "{{ title }}",
-        "description": "{{ description }}",
-        "image": "{{ cover_image_url }}",
-        "url": "{{ url }}",
-        "offers": {
-            "@type": "Offer",
-            "price": "{{ price }}",
-            "priceCurrency": "CNY",
-            "availability": "https://schema.org/InStock"
-        }
-    }
-    </script>
+    <script type="application/ld+json">{{ json_ld | tojson }}</script>
     
     <!-- Canonical URL -->
     <link rel="canonical" href="{{ url }}">
@@ -75,25 +104,48 @@ def generate_resource_html(resource_data: Dict[str, Any]) -> str:
     Returns:
         HTML string
     """
-    template = Template(RESOURCE_TEMPLATE)
-    
+    title = resource_data.get('title') or ''
+    description = resource_data.get('description') or ''
+    cover_image_url = resource_data.get('cover_image_url') or ''
+    price = resource_data.get('price', 0)
+    slug = resource_data.get('slug') or ''
+    url = f"{settings.SITE_URL}/resources/{slug}"
+    template = _HTML_ENVIRONMENT.from_string(RESOURCE_TEMPLATE)
+
     html = template.render(
-        title=resource_data.get('title', ''),
-        description=resource_data.get('description', ''),
-        excerpt=resource_data.get('excerpt', ''),
+        title=title,
+        description=description,
+        excerpt=resource_data.get('excerpt') or '',
         meta_title=resource_data.get('meta_title'),
         meta_description=resource_data.get('meta_description'),
-        meta_keywords=resource_data.get('meta_keywords', ''),
-        cover_image_url=resource_data.get('cover_image_url', ''),
-        price=resource_data.get('price', 0),
-        url=f"{settings.SITE_URL}/resources/{resource_data.get('slug', '')}",
-        site_name=settings.APP_NAME
+        meta_keywords=resource_data.get('meta_keywords') or '',
+        cover_image_url=cover_image_url,
+        price=price,
+        url=url,
+        site_name=settings.APP_NAME,
+        json_ld={
+            "@context": "https://schema.org/",
+            "@type": "Product",
+            "name": title,
+            "description": description,
+            "image": cover_image_url,
+            "url": url,
+            "offers": {
+                "@type": "Offer",
+                "price": str(price),
+                "priceCurrency": "CNY",
+                "availability": "https://schema.org/InStock",
+            },
+        },
     )
     
     return html
 
 
-def save_resource_html(resource_data: Dict[str, Any], output_path: str = None):
+def save_resource_html(
+    resource_data: Dict[str, Any],
+    output_path: str | Path | None = None,
+):
     """
     Generate and save resource HTML to file.
     
@@ -101,17 +153,19 @@ def save_resource_html(resource_data: Dict[str, Any], output_path: str = None):
         resource_data: Resource information
         output_path: Path to save HTML file
     """
-    if output_path is None:
-        slug = resource_data.get('slug', 'resource')
-        output_path = f"{settings.STATIC_PAGES_DIR}/resources/{slug}.html"
+    slug = resource_data.get('slug') or 'resource'
+    if not is_valid_resource_slug(slug):
+        raise ValueError("Invalid resource slug")
+
+    destination = (
+        get_resource_html_path(slug)
+        if output_path is None
+        else Path(output_path).expanduser()
+    )
     
     html = generate_resource_html(resource_data)
     
-    # Ensure directory exists
-    import os
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(html, encoding='utf-8')
     
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(html)
-    
-    return output_path
+    return str(destination)

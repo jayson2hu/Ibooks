@@ -1,29 +1,34 @@
 import { api } from '@/lib/api';
 import type { Metadata } from 'next';
 import CopyButton from '@/components/common/CopyButton';
+import RetryableError from '@/components/common/RetryableError';
+import type { Contact } from '@/types';
 
 export const metadata: Metadata = {
     title: '联系我们',
     description: '联系方式 - 随时与我们取得联系',
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function ContactPage() {
-    let contacts = [];
+    let contacts: Contact[] = [];
+    let loadFailed = false;
 
     try {
         const response = await api.contacts.list(true);
-        contacts = response.data || [];
+        contacts = (response.data || []).filter((contact) => contact.show_in_contact_page);
     } catch (error) {
         console.error('Failed to fetch contacts:', error);
+        loadFailed = true;
     }
 
     // Group contacts by type
-    const groupedContacts: any = {};
-    contacts.forEach((contact: any) => {
-        if (!groupedContacts[contact.type]) {
-            groupedContacts[contact.type] = [];
-        }
-        groupedContacts[contact.type].push(contact);
+    const groupedContacts: Partial<Record<Contact['type'], Contact[]>> = {};
+    contacts.forEach((contact) => {
+        const group = groupedContacts[contact.type] ?? [];
+        group.push(contact);
+        groupedContacts[contact.type] = group;
     });
 
     return (
@@ -39,9 +44,18 @@ export default async function ContactPage() {
 
                 {/* Contact Cards */}
                 <div className="max-w-4xl mx-auto">
+                    {loadFailed ? (
+                        <div className="mb-12">
+                            <RetryableError message="联系方式加载失败，请稍后重试。" />
+                        </div>
+                    ) : contacts.length === 0 ? (
+                        <div className="mb-12 py-16 text-center text-secondary">
+                            暂无联系方式
+                        </div>
+                    ) : (
                     <div className="grid grid-2 gap-6 mb-12">
                         {/* WeChat */}
-                        {groupedContacts.wechat && groupedContacts.wechat.map((contact: any) => (
+                        {groupedContacts.wechat?.map((contact) => (
                             <div key={contact.id} className="card text-center">
                                 <div className="text-4xl mb-4">💬</div>
                                 <h3 className="text-xl font-semibold mb-2">{contact.label}</h3>
@@ -67,12 +81,14 @@ export default async function ContactPage() {
                         ))}
 
                         {/* WeChat QR */}
-                        {groupedContacts.wechat_qr && groupedContacts.wechat_qr.map((contact: any) => (
+                        {groupedContacts.wechat_qr?.map((contact) => (
                             <div key={contact.id} className="card text-center">
                                 <div className="text-4xl mb-4">📱</div>
                                 <h3 className="text-xl font-semibold mb-4">{contact.label}</h3>
                                 {contact.qr_code_url && (
                                     <div className="inline-block p-4 bg-white border-2 border-gray-200 rounded-lg">
+                                        {/* User-configured QR URLs can come from arbitrary external hosts. */}
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
                                             src={contact.qr_code_url}
                                             alt={contact.label}
@@ -87,7 +103,7 @@ export default async function ContactPage() {
                         ))}
 
                         {/* QQ */}
-                        {groupedContacts.qq && groupedContacts.qq.map((contact: any) => (
+                        {groupedContacts.qq?.map((contact) => (
                             <div key={contact.id} className="card text-center">
                                 <div className="text-4xl mb-4">🐧</div>
                                 <h3 className="text-xl font-semibold mb-2">{contact.label}</h3>
@@ -119,7 +135,7 @@ export default async function ContactPage() {
                         ))}
 
                         {/* Email */}
-                        {groupedContacts.email && groupedContacts.email.map((contact: any) => (
+                        {groupedContacts.email?.map((contact) => (
                             <div key={contact.id} className="card text-center">
                                 <div className="text-4xl mb-4">📧</div>
                                 <h3 className="text-xl font-semibold mb-2">{contact.label}</h3>
@@ -136,7 +152,7 @@ export default async function ContactPage() {
                         ))}
 
                         {/* Phone */}
-                        {groupedContacts.phone && groupedContacts.phone.map((contact: any) => (
+                        {groupedContacts.phone?.map((contact) => (
                             <div key={contact.id} className="card text-center">
                                 <div className="text-4xl mb-4">📞</div>
                                 <h3 className="text-xl font-semibold mb-2">{contact.label}</h3>
@@ -153,7 +169,7 @@ export default async function ContactPage() {
                         ))}
 
                         {/* Telegram */}
-                        {groupedContacts.telegram && groupedContacts.telegram.map((contact: any) => (
+                        {groupedContacts.telegram?.map((contact) => (
                             <div key={contact.id} className="card text-center">
                                 <div className="text-4xl mb-4">✈️</div>
                                 <h3 className="text-xl font-semibold mb-2">{contact.label}</h3>
@@ -172,6 +188,7 @@ export default async function ContactPage() {
                             </div>
                         ))}
                     </div>
+                    )}
 
                     {/* FAQ or Additional Info */}
                     <div className="card bg-surface">
@@ -180,7 +197,7 @@ export default async function ContactPage() {
                             <div>
                                 <h3 className="font-semibold mb-2">📮 如何获取资源？</h3>
                                 <p className="text-secondary">
-                                    浏览资源页面，点击"获取资源"按钮即可获得云盘链接和提取码。
+                                    浏览资源页面，点击&ldquo;获取资源&rdquo;按钮即可获得云盘链接和提取码。
                                 </p>
                             </div>
                             <div>

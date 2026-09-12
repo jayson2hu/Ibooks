@@ -4,8 +4,12 @@ Category model for organizing resources.
 from sqlalchemy import String, Text, Integer, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 from app.database import Base
+from app.utils.datetime_utils import utc_now
+
+if TYPE_CHECKING:
+    from app.models.resource import Resource
 
 
 class Category(Base):
@@ -21,7 +25,14 @@ class Category(Base):
     description: Mapped[str | None] = mapped_column(Text)
     
     # Hierarchy (for nested categories)
-    parent_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True)
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "categories.id",
+            name="fk_categories_parent_id_categories",
+            ondelete="RESTRICT",
+        ),
+        index=True,
+    )
     parent: Mapped[Optional["Category"]] = relationship(
         "Category",
         remote_side="Category.id",
@@ -30,7 +41,7 @@ class Category(Base):
     children: Mapped[List["Category"]] = relationship(
         "Category",
         back_populates="parent",
-        cascade="all, delete-orphan"
+        passive_deletes="all",
     )
     
     # Display
@@ -52,11 +63,11 @@ class Category(Base):
     resource_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False
     )
     
@@ -64,7 +75,7 @@ class Category(Base):
     resources: Mapped[List["Resource"]] = relationship(
         "Resource",
         back_populates="category",
-        cascade="all, delete-orphan"
+        passive_deletes="all",
     )
     
     def __repr__(self) -> str:

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useSiteSettings } from '@/contexts/SiteSettingsContext';
 
 export default function Header() {
     const [isScrolledState, setIsScrolled] = useState(false);
@@ -12,6 +13,7 @@ export default function Header() {
     const router = useRouter();
     const pathname = usePathname();
     const { isAuthenticated, isLoading, logout } = useAuth();
+    const { siteName } = useSiteSettings();
     // Force scrolled style on non-home pages to ensure visibility on white backgrounds
     const isScrolled = isScrolledState || pathname !== '/';
 
@@ -45,7 +47,7 @@ export default function Header() {
                         <span className="text-3xl transform group-hover:scale-110 transition-transform duration-200">📚</span>
                         <div className={`text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 ${!isScrolled && 'text-white'
                             }`}>
-                            资源市场
+                            {siteName}
                         </div>
                     </Link>
 
@@ -64,6 +66,7 @@ export default function Header() {
                             />
                             <button
                                 type="submit"
+                                aria-label="搜索"
                                 className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-colors ${isScrolled
                                     ? 'text-gray-400 hover:text-blue-600'
                                     : 'text-white/70 hover:text-white'
@@ -148,7 +151,9 @@ export default function Header() {
                     <button
                         className="md:hidden p-2 rounded-lg hover:bg-black/5 transition-colors"
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                        aria-label="Toggle menu"
+                        aria-label={isMobileMenuOpen ? '关闭导航菜单' : '打开导航菜单'}
+                        aria-expanded={isMobileMenuOpen}
+                        aria-controls="mobile-navigation"
                     >
                         <svg className={`w-6 h-6 ${isScrolled ? 'text-gray-700' : 'text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             {isMobileMenuOpen ? (
@@ -161,7 +166,7 @@ export default function Header() {
                 </div>
 
                 {/* Mobile Menu */}
-                <div className={`md:hidden transition-all duration-300 ease-in-out overflow-hidden ${isMobileMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                <div id="mobile-navigation" className={`md:hidden transition-all duration-300 ease-in-out overflow-hidden ${isMobileMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
                     }`}>
                     <div className="py-4 bg-white rounded-xl shadow-xl mt-2 border border-gray-100">
                         <div className="px-4 mb-4">
@@ -173,7 +178,7 @@ export default function Header() {
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                 />
-                                <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                                <button type="submit" aria-label="搜索" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                     </svg>

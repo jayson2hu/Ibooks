@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, getApiErrorMessage } from '@/lib/api';
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
     const searchParams = useSearchParams();
     const token = searchParams.get('token');
     const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -23,13 +23,13 @@ export default function VerifyEmailPage() {
                 const response = await api.auth.verifyEmail(token);
                 setStatus('success');
                 setMessage(response.data?.message || '邮箱验证成功');
-            } catch (err: any) {
+            } catch (error: unknown) {
                 setStatus('error');
-                setMessage(err.response?.data?.detail || '邮箱验证失败');
+                setMessage(getApiErrorMessage(error, '邮箱验证失败'));
             }
         };
 
-        verify();
+        void verify();
     }, [token]);
 
     return (
@@ -44,5 +44,13 @@ export default function VerifyEmailPage() {
                 </Link>
             </div>
         </div>
+    );
+}
+
+export default function VerifyEmailPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">正在加载...</div>}>
+            <VerifyEmailContent />
+        </Suspense>
     );
 }

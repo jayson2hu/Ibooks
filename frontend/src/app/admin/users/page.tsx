@@ -1,54 +1,57 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { api, getApiErrorMessage } from '@/lib/api';
+import type { AdminUserUpdate, User } from '@/types';
 
 export default function UserManagement() {
-    const [users, setUsers] = useState<any[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [updatingId, setUpdatingId] = useState<number | null>(null);
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
+    const [pages, setPages] = useState(0);
     const pageSize = 20;
 
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         setLoading(true);
         setError('');
         try {
             const response = await api.admin.getUsers({ page, page_size: pageSize });
-            setUsers(response.data || []);
-            setTotal(response.data?.length || 0);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '无法加载用户列表');
+            setUsers(response.data.items);
+            setTotal(response.data.total);
+            setPages(response.data.pages);
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '无法加载用户列表'));
         } finally {
             setLoading(false);
         }
-    };
-
-    useEffect(() => {
-        fetchUsers();
     }, [page]);
 
-    const updateUser = async (id: number, data: any) => {
+    useEffect(() => {
+        void fetchUsers();
+    }, [fetchUsers]);
+
+    const updateUser = async (id: number, data: AdminUserUpdate) => {
         setUpdatingId(id);
         setError('');
         try {
             const response = await api.admin.updateUser(id, data);
             setUsers((prev) => prev.map((user) => user.id === id ? response.data : user));
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '用户更新失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '用户更新失败'));
         } finally {
             setUpdatingId(null);
         }
     };
 
-    const toggleStatus = (user: any) => {
+    const toggleStatus = (user: User) => {
         const nextStatus = user.status === 'active' ? 'suspended' : 'active';
         updateUser(user.id, { status: nextStatus });
     };
 
-    const changeRole = (user: any, role: string) => {
+    const changeRole = (user: User, role: User['role']) => {
         updateUser(user.id, { role });
     };
 
@@ -102,7 +105,7 @@ export default function UserManagement() {
                                         <select
                                             value={user.role}
                                             disabled={updatingId === user.id || user.role === 'admin'}
-                                            onChange={(e) => changeRole(user, e.target.value)}
+                                            onChange={(e) => changeRole(user, e.target.value as User['role'])}
                                             className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 disabled:bg-gray-50 disabled:text-gray-400"
                                         >
                                             <option value="user">用户</option>
@@ -141,7 +144,7 @@ export default function UserManagement() {
             </div>
 
             <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
-                <span>当前页 {users.length} 条记录</span>
+                <span>共 {total} 条，当前页 {users.length} 条记录</span>
                 <div className="flex gap-2">
                     <button
                         onClick={() => setPage((prev) => Math.max(1, prev - 1))}
@@ -153,7 +156,7 @@ export default function UserManagement() {
                     <span className="px-2 py-1">第 {page} 页</span>
                     <button
                         onClick={() => setPage((prev) => prev + 1)}
-                        disabled={loading || total < pageSize}
+                        disabled={loading || page >= pages}
                         className="rounded border border-gray-200 px-3 py-1 disabled:opacity-50"
                     >
                         下一页

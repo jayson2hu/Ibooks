@@ -3,11 +3,16 @@ Wallet and coin ledger models.
 """
 from datetime import datetime
 import enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.utils.datetime_utils import utc_now
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class CoinLedgerType(str, enum.Enum):
@@ -35,11 +40,11 @@ class Wallet(Base):
     total_recharged: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_spent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_rewarded: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False,
     )
 
@@ -63,7 +68,7 @@ class CoinLedger(Base):
     type: Mapped[CoinLedgerType] = mapped_column(SQLEnum(CoinLedgerType), nullable=False, index=True)
     related_order_no: Mapped[str | None] = mapped_column(String(64), index=True)
     description: Mapped[str | None] = mapped_column(String(500))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
 
     user: Mapped["User"] = relationship("User")
     wallet: Mapped[Wallet] = relationship("Wallet", back_populates="ledger_entries")

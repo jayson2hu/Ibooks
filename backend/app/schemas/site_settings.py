@@ -1,9 +1,9 @@
-"""
-Site settings schemas for API requests and responses.
-"""
-from pydantic import BaseModel, Field, ConfigDict
+"""Site settings schemas for API requests and responses."""
+
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SiteSettingBase(BaseModel):
@@ -20,8 +20,21 @@ class SiteSettingCreate(SiteSettingBase):
 
 class SiteSettingUpdate(BaseModel):
     """Schema for updating a site setting."""
+
     value: str = Field(..., description="Setting value")
-    updated_by: Optional[str] = None
+
+    # Older clients may still send ``updated_by``. Ignore it instead of
+    # trusting it; the authenticated administrator is the sole audit source.
+    model_config = ConfigDict(extra="ignore")
+
+
+class PublicSiteSettingResponse(BaseModel):
+    """Public presentation setting without administrative metadata."""
+
+    key: str
+    value: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SiteSettingResponse(SiteSettingBase):

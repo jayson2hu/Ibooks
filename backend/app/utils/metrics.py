@@ -4,7 +4,8 @@ Prometheus metrics utilities for monitoring.
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi import Response
 import psutil
-import time
+
+from app.config import settings
 
 
 # Request metrics
@@ -63,7 +64,8 @@ def update_system_metrics():
 
 def metrics_endpoint() -> Response:
     """Endpoint for Prometheus to scrape metrics."""
-    update_system_metrics()
+    if settings.MONITOR_SYSTEM_METRICS:
+        update_system_metrics()
     return Response(
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST

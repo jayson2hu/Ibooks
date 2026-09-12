@@ -3,10 +3,9 @@ Async audit logging system using background tasks.
 Decouples audit logging from request processing for better performance.
 """
 from typing import Optional, Dict, Any
-from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.audit_log import AuditLog, AuditAction
-from app.database import get_db
+from app.utils.datetime_utils import utc_now
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -70,7 +69,7 @@ async def log_audit_event(
             success=success,
             error_message=error_message,
             details=details or {},
-            created_at=datetime.utcnow(),
+            created_at=utc_now(),
         )
 
         db.add(audit_log)
@@ -245,7 +244,7 @@ async def audit_resource_action(
         ip_address=ip_address,
         user_agent=user_agent,
         request_method="POST",
-        request_path=f"/api/v1/resources",
+        request_path="/api/v1/resources",
         success=success,
         error_message=error_message,
     )

@@ -10,16 +10,17 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from math import ceil
 from app.database import get_db
-from app.dependencies import get_current_admin
+from app.dependencies import get_current_admin, get_current_staff
 from app.models.recharge import RechargeOrder, RechargeOrderStatus, RechargePackage
 from app.schemas.user import UserResponse, UserUpdateAdmin
+from app.schemas.common import PaginatedResponse
+from app.schemas.resource import AdminResourceResponse, ResourceListResponse
 from app.schemas.recharge import (
     RechargeOrderListResponse,
     RechargePackageCreate,
     RechargePackageResponse,
     RechargePackageUpdate,
 )
-from app.schemas.site_settings import SiteSettingResponse
 from app.schemas.wallet import (
     AdminCoinLedgerListResponse,
     AdminWalletListResponse,
@@ -29,7 +30,7 @@ from app.schemas.wallet import (
 from app.models.user import User
 from app.models.resource import Resource
 from app.models.category import Category
-from app.models.audit_log import AuditLog
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.site_settings import SiteSetting
 from app.models.wallet import CoinLedger, CoinLedgerType, Wallet
 from app.services.site_settings import (
@@ -37,7 +38,7 @@ from app.services.site_settings import (
     SIGNIN_ENABLED_KEY,
     SIGNIN_REWARD_COINS_KEY,
 )
-from app.services.wallet import credit_wallet, debit_wallet, get_or_create_wallet
+from app.services.wallet import credit_wallet, debit_wallet
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -57,7 +58,7 @@ def paginated_response(items, total: int, page: int, page_size: int) -> dict:
 @router.get("/stats")
 async def get_stats(
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_admin)
+    current_user = Depends(get_current_staff)
 ):
     """
     Get platform statistics (Admin only).
@@ -69,7 +70,7 @@ async def get_stats(
     resource_count = await db.scalar(select(func.count()).select_from(Resource))
     category_count = await db.scalar(select(func.count()).select_from(Category))
     published_resources = await db.scalar(
-        select(func.count()).select_from(Resource).where(Resource.is_published == True)
+        select(func.count()).select_from(Resource).where(Resource.is_published)
     )
     
     # Get total views
@@ -86,21 +87,83 @@ async def get_stats(
     }
 
 
-@router.get("/users", response_model=List[UserResponse])
+@router.get("/resources", response_model=ResourceListResponse)
+async def list_resources(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None, max_length=500),
+    category_id: Optional[int] = Query(None, ge=1),
+    is_published: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_staff),
+):
+    """List published and draft resources for content administration."""
+    query = select(Resource)
+
+    if category_id is not None:
+        query = query.where(Resource.category_id == category_id)
+    if is_published is not None:
+        query = query.where(Resource.is_published == is_published)
+    if search and (search_term := search.strip()):
+        keyword = f"%{search_term}%"
+        query = query.where(
+            or_(
+                Resource.title.ilike(keyword),
+                Resource.description.ilike(keyword),
+                Resource.excerpt.ilike(keyword),
+            )
+        )
+
+    total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    result = await db.execute(
+        query
+        .order_by(
+            Resource.sort_order.desc(),
+            Resource.created_at.desc(),
+            Resource.id.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return paginated_response(result.scalars().all(), total or 0, page, page_size)
+
+
+@router.get("/resources/{resource_id}", response_model=AdminResourceResponse)
+async def get_resource(
+    resource_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_staff),
+):
+    """Get a resource by ID for administration, including delivery fields."""
+    resource = await db.get(Resource, resource_id)
+    if not resource:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource not found",
+        )
+    return resource
+
+
+@router.get("/users", response_model=PaginatedResponse[UserResponse])
 async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_admin)
 ):
-    """List all users (Admin only)."""
-    query = select(User).order_by(User.created_at.desc())
-    query = query.offset((page - 1) * page_size).limit(page_size)
-    
-    result = await db.execute(query)
-    users = result.scalars().all()
-    
-    return users
+    """Return the only user-list contract: a paginated response object."""
+    query = select(User).order_by(User.created_at.desc(), User.id.desc())
+    total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    result = await db.execute(
+        query.offset((page - 1) * page_size).limit(page_size)
+    )
+
+    return paginated_response(
+        result.scalars().all(),
+        total or 0,
+        page,
+        page_size,
+    )
 
 
 @router.patch("/users/{user_id}", response_model=UserResponse)
@@ -135,7 +198,7 @@ async def update_user(
 async def get_audit_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    action: Optional[str] = None,
+    action: Optional[AuditAction] = Query(None),
     user_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_admin)
@@ -319,7 +382,7 @@ async def list_recharge_packages(
     """List recharge packages for admin management."""
     query = select(RechargePackage)
     if not include_inactive:
-        query = query.where(RechargePackage.is_active == True)
+        query = query.where(RechargePackage.is_active)
     result = await db.execute(
         query.order_by(RechargePackage.sort_order.desc(), RechargePackage.amount.asc(), RechargePackage.id.asc())
     )

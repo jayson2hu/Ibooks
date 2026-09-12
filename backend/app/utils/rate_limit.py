@@ -2,7 +2,6 @@
 Redis-backed fixed-window rate limiting utilities.
 """
 import redis.asyncio as redis
-from redis.exceptions import RedisError
 
 from app.config import settings
 
@@ -11,8 +10,8 @@ async def check_rate_limit(key: str, max_calls: int, window_seconds: int) -> boo
     """
     Return True when the request is allowed.
 
-    Redis failures are treated as allow to avoid taking authentication offline when
-    the cache is temporarily unavailable.
+    Backend failures propagate to the caller so security-sensitive endpoints can
+    fail closed instead of silently disabling brute-force protection.
     """
     client = redis.from_url(settings.REDIS_URL, decode_responses=True)
     try:
@@ -20,7 +19,5 @@ async def check_rate_limit(key: str, max_calls: int, window_seconds: int) -> boo
         if count == 1:
             await client.expire(key, window_seconds)
         return count <= max_calls
-    except (RedisError, OSError):
-        return True
     finally:
         await client.aclose()

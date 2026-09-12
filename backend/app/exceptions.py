@@ -2,8 +2,8 @@
 Unified exception handling system with standard error responses.
 """
 from fastapi import HTTPException, status
-from typing import Optional, List, Dict, Any
-from app.schemas.responses import ErrorDetail, error_response
+from typing import Optional, List, Dict
+from app.schemas.responses import ErrorDetail
 
 
 class AppException(HTTPException):
@@ -42,7 +42,7 @@ class ValidationError(AppException):
         """Initialize validation error with field errors."""
         self.errors = errors or []
         super().__init__(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             message=message,
             detail=message,
             error_code=error_code,

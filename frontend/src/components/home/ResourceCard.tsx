@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { CalendarIcon, HeartIcon } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
 import { useState } from 'react';
+import ResourceCover from '@/components/common/ResourceCover';
 
 interface Resource {
   id: number;
@@ -14,10 +14,12 @@ interface Resource {
   slug: string;
   resource_type: string;
   price: number;
+  coin_price?: number;
   is_free: boolean;
-  thumbnail_url?: string;
+  cover_image_url?: string;
   created_at?: string;
   likes_count?: number;
+  view_count?: number;
 }
 
 interface ResourceCardProps {
@@ -27,7 +29,6 @@ interface ResourceCardProps {
 
 export default function ResourceCard({ resource, onHover }: ResourceCardProps) {
   const [isLiked, setIsLiked] = useState(false);
-  const [imageError, setImageError] = useState(false);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '最近';
@@ -35,10 +36,10 @@ export default function ResourceCard({ resource, onHover }: ResourceCardProps) {
     return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
   };
 
-  const formatPrice = (price: number, isFree: boolean) => {
+  const formatPrice = (price: number, coinPrice: number | undefined, isFree: boolean) => {
     if (isFree) return '免费';
-    if (price === 0) return '免费';
-    return `¥${price.toFixed(2)}`;
+    if ((coinPrice ?? 0) === 0 && price === 0) return '免费';
+    return `${coinPrice ?? 0} 书币`;
   };
 
   return (
@@ -64,33 +65,11 @@ export default function ResourceCard({ resource, onHover }: ResourceCardProps) {
       >
         {/* 缩略图 */}
         <div className="relative aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
-          {resource.thumbnail_url && !imageError ? (
-            <Image
-              src={resource.thumbnail_url}
-              alt={`${resource.title}的缩略图`}
-              fill
-              sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
-              className="
-                object-cover
-                group-hover:scale-110
-                transition-transform duration-500 ease-smooth
-              "
-              onError={() => setImageError(true)}
-              loading="lazy"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
-              {/* 默认图标 */}
-              <div className="relative">
-                <div className="w-20 h-20 bg-gradient-to-br from-indigo-400 via-purple-400 to-pink-400 rounded-2xl transform rotate-12 group-hover:rotate-[20deg] transition-transform duration-300"></div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          )}
+          <ResourceCover
+            src={resource.cover_image_url}
+            alt={`${resource.title}的缩略图`}
+            className="h-full w-full object-cover transition-transform duration-500 ease-smooth group-hover:scale-110"
+          />
 
           {/* 收藏按钮 */}
           <button
@@ -121,13 +100,13 @@ export default function ResourceCard({ resource, onHover }: ResourceCardProps) {
               className={`
                 px-3 py-1 rounded-full text-sm font-bold
                 backdrop-blur-sm shadow-lg
-                ${resource.is_free || resource.price === 0
+                ${resource.is_free || (resource.coin_price ?? resource.price) === 0
                   ? 'bg-green-500/90 text-white'
                   : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
                 }
               `}
             >
-              {formatPrice(resource.price, resource.is_free)}
+              {formatPrice(resource.price, resource.coin_price, resource.is_free)}
             </span>
           </div>
         </div>
@@ -171,7 +150,7 @@ export default function ResourceCard({ resource, onHover }: ResourceCardProps) {
             </div>
             <div className="flex items-center gap-1">
               <HeartIcon className="w-4 h-4" />
-              <span>{resource.likes_count || Math.floor(Math.random() * 50) + 10}赞</span>
+              <span>{resource.likes_count ?? resource.view_count ?? 0}赞</span>
             </div>
           </div>
         </div>

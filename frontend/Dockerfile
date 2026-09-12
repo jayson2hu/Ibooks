@@ -13,9 +13,18 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Set environment variables
-ENV NEXT_PUBLIC_API_URL=http://backend:8000
-ENV NEXT_PUBLIC_SITE_URL=http://localhost:3000
+# NEXT_PUBLIC_* values are compiled into the browser bundle by Next.js.
+# Keep them explicit so a production image cannot silently target localhost.
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SITE_URL
+ARG INTERNAL_API_URL
+RUN test -n "$NEXT_PUBLIC_API_URL" \
+    && test -n "$NEXT_PUBLIC_SITE_URL" \
+    || (echo "NEXT_PUBLIC_API_URL and NEXT_PUBLIC_SITE_URL build arguments are required" >&2; exit 1)
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+ENV INTERNAL_API_URL=${INTERNAL_API_URL}
+ENV NEXT_OUTPUT_STANDALONE=true
 
 RUN npm run build
 

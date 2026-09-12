@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import StatsCard from '@/components/admin/StatsCard';
 import StatsSkeleton from '@/components/admin/StatsSkeleton';
 import ErrorMessage from '@/components/admin/ErrorMessage';
-import { api } from '@/lib/api';
+import { api, getApiErrorMessage } from '@/lib/api';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 
 interface Stats {
@@ -25,36 +25,61 @@ interface RecentResource {
     is_published: boolean;
 }
 
+interface RecentOrder {
+    id: number;
+    order_no: string;
+    coin_amount: number;
+    status: string;
+    created_at: string;
+    resource?: { title?: string } | null;
+    user?: { email?: string } | null;
+}
+
 export default function AdminDashboard() {
-    const { isAuthenticated, isLoading: isAuthLoading } = useAdminAuth();
+    const { isAuthenticated, role } = useAdminAuth();
     const [stats, setStats] = useState<Stats | null>(null);
     const [recentResources, setRecentResources] = useState<RecentResource[]>([]);
+    const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+    const [recentOrdersError, setRecentOrdersError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchDashboard = async () => {
+    const fetchDashboard = useCallback(async () => {
         try {
             setIsLoading(true);
             setError(null);
+            setRecentOrdersError(null);
             const [statsResponse, resourcesResponse] = await Promise.all([
                 api.admin.getStats(),
                 api.resources.list({ page: 1, page_size: 5 }),
             ]);
             setStats(statsResponse.data);
             setRecentResources(resourcesResponse.data?.items || []);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '无法加载统计数据，请稍后重试');
+            if (role === 'admin') {
+                try {
+                    const ordersResponse = await api.orders.adminList({ page: 1, page_size: 5 });
+                    setRecentOrders(ordersResponse.data?.items || []);
+                } catch (error: unknown) {
+                    setRecentOrders([]);
+                    setRecentOrdersError(getApiErrorMessage(error, '无法加载最新订单，请稍后重试'));
+                }
+            } else {
+                setRecentOrders([]);
+                setRecentOrdersError(null);
+            }
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '无法加载统计数据，请稍后重试'));
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [role]);
 
     useEffect(() => {
         // Only fetch stats if authenticated
-        if (isAuthenticated) {
+        if (isAuthenticated && role) {
             fetchDashboard();
         }
-    }, [isAuthenticated]);
+    }, [fetchDashboard, isAuthenticated, role]);
 
     // Format number with commas
     const formatNumber = (num: number): string => {
@@ -97,13 +122,6 @@ export default function AdminDashboard() {
         },
     ] : [];
 
-    const recentOrders = [
-        { id: 1001, user: '张三', resource: 'Python 完全指南', amount: '¥99', status: '已完成' },
-        { id: 1002, user: '李四', resource: 'React 高级教程', amount: '¥199', status: '已完成' },
-        { id: 1003, user: '王五', resource: 'Next.js 14 实战', amount: '¥149', status: '进行中' },
-        { id: 1004, user: '赵六', resource: 'TypeScript 深入浅出', amount: '¥129', status: '已完成' },
-    ];
-
     return (
         <div className="space-y-8">
             {/* Page Header */}
@@ -131,7 +149,7 @@ export default function AdminDashboard() {
             )}
 
             {/* Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className={`grid grid-cols-1 gap-6 ${role === 'admin' ? 'lg:grid-cols-2' : ''}`}>
                 {/* Recent Resources */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200">
                     <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
@@ -169,7 +187,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Recent Orders */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                {role === 'admin' && <div className="bg-white rounded-xl shadow-sm border border-gray-200">
                     <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                         <h2 className="text-lg font-bold text-gray-900">最新订单</h2>
                         <Link href="/admin/orders" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
@@ -178,18 +196,30 @@ export default function AdminDashboard() {
                     </div>
                     <div className="p-6">
                         <div className="space-y-4">
-                            {recentOrders.map((order) => (
+                            {isLoading ? (
+                                <div className="py-4 text-sm text-gray-500">加载中...</div>
+                            ) : recentOrdersError || error ? (
+                                <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                    <p>{recentOrdersError || '最新订单尚未加载，请重试。'}</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => void fetchDashboard()}
+                                        className="mt-3 rounded border border-red-300 bg-white px-3 py-1.5 font-medium hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    >
+                                        重新加载订单
+                                    </button>
+                                </div>
+                            ) : recentOrders.length === 0 ? (
+                                <div className="py-4 text-sm text-gray-500">暂无订单</div>
+                            ) : recentOrders.map((order) => (
                                 <div key={order.id} className="flex items-center justify-between">
                                     <div className="flex-1">
-                                        <h3 className="text-sm font-medium text-gray-900">#{order.id} - {order.user}</h3>
-                                        <p className="text-xs text-gray-500 mt-1">{order.resource}</p>
+                                        <h3 className="text-sm font-medium text-gray-900">#{order.order_no}</h3>
+                                        <p className="text-xs text-gray-500 mt-1">{order.resource?.title || '资源'} - {order.user?.email || '用户'}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-sm font-bold text-gray-900">{order.amount}</p>
-                                        <span className={`text-xs ${order.status === '已完成'
-                                            ? 'text-green-600'
-                                            : 'text-blue-600'
-                                            }`}>
+                                        <p className="text-sm font-bold text-gray-900">{order.coin_amount} 书币</p>
+                                        <span className={`text-xs ${order.status === 'paid' ? 'text-green-600' : 'text-blue-600'}`}>
                                             {order.status}
                                         </span>
                                     </div>
@@ -197,7 +227,7 @@ export default function AdminDashboard() {
                             ))}
                         </div>
                     </div>
-                </div>
+                </div>}
             </div>
 
             {/* Quick Actions */}
@@ -208,12 +238,16 @@ export default function AdminDashboard() {
                     <Link href="/admin/resources/new" className="px-5 py-2.5 bg-white text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-colors">
                         + 添加资源
                     </Link>
-                    <Link href="/admin/users" className="px-5 py-2.5 bg-white/10 backdrop-blur-sm text-white rounded-lg font-medium hover:bg-white/20 transition-colors">
-                        管理用户
-                    </Link>
-                    <Link href="/admin/settings" className="px-5 py-2.5 bg-white/10 backdrop-blur-sm text-white rounded-lg font-medium hover:bg-white/20 transition-colors">
-                        系统设置
-                    </Link>
+                    {role === 'admin' && (
+                        <>
+                            <Link href="/admin/users" className="px-5 py-2.5 bg-white/10 backdrop-blur-sm text-white rounded-lg font-medium hover:bg-white/20 transition-colors">
+                                管理用户
+                            </Link>
+                            <Link href="/admin/settings" className="px-5 py-2.5 bg-white/10 backdrop-blur-sm text-white rounded-lg font-medium hover:bg-white/20 transition-colors">
+                                系统设置
+                            </Link>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

@@ -7,10 +7,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import Dict, Tuple
-import hashlib
 import secrets
-from app.config import settings
 from app.schemas.responses import error_response
+from app.utils.datetime_utils import utc_now
 import logging
 
 logger = logging.getLogger(__name__)
@@ -52,7 +51,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 break
 
         # Check rate limit
-        now = datetime.utcnow()
+        now = utc_now()
         bucket = self.buckets[client_ip]
 
         # Remove old entries (older than 1 minute)
@@ -110,7 +109,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
         _, created_at = self.csrf_tokens[token]
         expiry_time = created_at + timedelta(minutes=self.token_expiry_minutes)
-        return datetime.utcnow() > expiry_time
+        return utc_now() > expiry_time
 
     async def dispatch(self, request: Request, call_next):
         """Check CSRF token for state-changing requests."""
@@ -120,7 +119,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
             # Generate and include CSRF token in response headers
             token = self._generate_token()
-            self.csrf_tokens[token] = (token, datetime.utcnow())
+            self.csrf_tokens[token] = (token, utc_now())
 
             response.headers["X-CSRF-Token"] = token
             return response

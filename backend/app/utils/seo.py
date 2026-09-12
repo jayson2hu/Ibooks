@@ -3,7 +3,12 @@ SEO utilities for URL slugs, meta tags, and structured data.
 """
 from slugify import slugify
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+import httpx
+from app.config import settings
+from app.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 def generate_slug(text: str, max_length: int = 200) -> str:
@@ -176,3 +181,40 @@ def generate_website_json_ld(
         }
     
     return json_ld
+
+
+async def push_to_baidu(urls: list[str]) -> Dict[str, Any]:
+    """Submit indexable URLs to Baidu when SEO submission is configured."""
+    cleaned_urls = list(dict.fromkeys(url.strip() for url in urls if url and url.strip()))
+    if not settings.SEO_SUBMIT_BAIDU or not settings.BAIDU_API_KEY or not cleaned_urls:
+        logger.info(
+            "Baidu URL submission skipped",
+            extra={
+                "enabled": settings.SEO_SUBMIT_BAIDU,
+                "has_api_key": bool(settings.BAIDU_API_KEY),
+                "url_count": len(cleaned_urls),
+            },
+        )
+        return {"skipped": True, "submitted": 0}
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.post(
+            "https://data.zz.baidu.com/urls",
+            params={"site": settings.SITE_URL, "token": settings.BAIDU_API_KEY},
+            content="\n".join(cleaned_urls),
+            headers={"Content-Type": "text/plain"},
+        )
+        response.raise_for_status()
+        result = response.json()
+
+    if isinstance(result, dict):
+        result.setdefault("submitted", len(cleaned_urls))
+        logger.info(
+            "Baidu URL submission completed",
+            extra={
+                "submitted_count": result.get("submitted", len(cleaned_urls)),
+                "success_count": result.get("success"),
+                "remaining_quota": result.get("remain"),
+            },
+        )
+    return result

@@ -1,8 +1,9 @@
 """
 Sitemap XML generation for SEO.
 """
+import asyncio
 from datetime import datetime
-from typing import List, Dict
+from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
 from xml.dom import minidom
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from sqlalchemy import select
 from app.models.resource import Resource
 from app.models.category import Category
 from app.config import settings
+from app.utils.datetime_utils import utc_now
 
 
 async def generate_sitemap_xml(db: AsyncSession) -> str:
@@ -30,14 +32,14 @@ async def generate_sitemap_xml(db: AsyncSession) -> str:
     add_url_to_sitemap(
         urlset,
         url=settings.SITE_URL,
-        lastmod=datetime.utcnow(),
+        lastmod=utc_now(),
         changefreq='daily',
         priority='1.0'
     )
     
     # Add resources
     result = await db.execute(
-        select(Resource).where(Resource.is_published == True)
+        select(Resource).where(Resource.is_published)
     )
     resources = result.scalars().all()
     
@@ -52,7 +54,7 @@ async def generate_sitemap_xml(db: AsyncSession) -> str:
     
     # Add categories
     result = await db.execute(
-        select(Category).where(Category.is_active == True)
+        select(Category).where(Category.is_active)
     )
     categories = result.scalars().all()
     
@@ -76,7 +78,7 @@ async def generate_sitemap_xml(db: AsyncSession) -> str:
         add_url_to_sitemap(
             urlset,
             url=f"{settings.SITE_URL}{page['url']}",
-            lastmod=datetime.utcnow(),
+            lastmod=utc_now(),
             changefreq='monthly',
             priority=page['priority']
         )
@@ -110,7 +112,15 @@ def add_url_to_sitemap(
     priority_element.text = priority
 
 
-async def save_sitemap(db: AsyncSession, output_path: str = None):
+def _write_sitemap(output_path: str | Path, sitemap_xml: str) -> str:
+    """Write a sitemap on a worker thread and return its resolved path."""
+    destination = Path(output_path).expanduser()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(sitemap_xml, encoding="utf-8")
+    return str(destination)
+
+
+async def save_sitemap(db: AsyncSession, output_path: str | Path | None = None):
     """
     Generate and save sitemap to file.
     
@@ -123,7 +133,4 @@ async def save_sitemap(db: AsyncSession, output_path: str = None):
     
     sitemap_xml = await generate_sitemap_xml(db)
     
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(sitemap_xml)
-    
-    return output_path
+    return await asyncio.to_thread(_write_sitemap, output_path, sitemap_xml)

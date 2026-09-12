@@ -5,6 +5,8 @@ __pycache__/
 *.py[cod]
 *.so
 *.egg-info/
+.coverage
+.coverage.*
 .Python
 venv/
 env/
@@ -23,6 +25,7 @@ build/
 # Logs
 logs/
 *.log
+.codex-run/
 
 # Database
 *.db
@@ -42,9 +45,6 @@ uploads/
 # OS
 .DS_Store
 Thumbs.db
-
-# Docker
-.dockerignore
 
 # Monitoring data
 monitoring/*/data/

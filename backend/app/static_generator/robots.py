@@ -1,6 +1,8 @@
 """
 Robots.txt generation for SEO.
 """
+from pathlib import Path
+
 from app.config import settings
 
 
@@ -37,7 +39,7 @@ Crawl-delay: 2
     return robots_content
 
 
-def save_robots_txt(output_path: str = None):
+def save_robots_txt(output_path: str | Path | None = None):
     """
     Generate and save robots.txt to file.
     
@@ -49,7 +51,8 @@ def save_robots_txt(output_path: str = None):
     
     robots_content = generate_robots_txt()
     
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(robots_content)
-    
-    return output_path
+    destination = Path(output_path).expanduser()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(robots_content, encoding="utf-8")
+
+    return str(destination)

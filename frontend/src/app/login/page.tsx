@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, getApiErrorMessage } from '@/lib/api';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -18,15 +19,17 @@ export default function LoginPage() {
 
         try {
             const response = await api.auth.login({ email, password });
-            const { access_token } = response.data;
+            const { access_token, refresh_token } = response.data;
 
             localStorage.setItem('token', access_token);
+            if (refresh_token) {
+                localStorage.setItem('refresh_token', refresh_token);
+            }
             localStorage.removeItem('user_role');
 
             router.push('/');
-        } catch (err: any) {
-            console.error('Login error:', err);
-            setError(err.response?.data?.detail || '登录失败，请检查邮箱和密码');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '登录失败，请检查邮箱和密码'));
         } finally {
             setIsLoading(false);
         }
@@ -94,9 +97,18 @@ export default function LoginPage() {
 
                 {/* Back to Home */}
                 <div className="mt-6 text-center">
-                    <a href="/" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                    <p className="text-sm text-gray-600 mb-3">
+                        还没有账户？{' '}
+                        <Link href="/register" className="text-blue-600 hover:text-blue-700">立即注册</Link>
+                    </p>
+                    <p className="mb-3">
+                        <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700">
+                            忘记密码？
+                        </Link>
+                    </p>
+                    <Link href="/" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
                         ← 返回首页
-                    </a>
+                    </Link>
                 </div>
             </div>
         </div>

@@ -1,7 +1,7 @@
 """
 Recharge package and order endpoints.
 """
-from datetime import datetime
+from decimal import Decimal, InvalidOperation
 import json
 from math import ceil
 import secrets
@@ -16,7 +16,12 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.recharge import RechargeOrder, RechargeOrderStatus, RechargePackage
+from app.models.recharge import (
+    RechargeOrder,
+    RechargeOrderStatus,
+    RechargePackage,
+    RechargePaymentMethod,
+)
 from app.models.user import User
 from app.models.wallet import CoinLedgerType
 from app.schemas.recharge import (
@@ -27,6 +32,7 @@ from app.schemas.recharge import (
 )
 from app.services.wallet import credit_wallet
 from app.utils.alipay_client import get_alipay_client, get_alipay_gateway
+from app.utils.datetime_utils import utc_now
 
 
 router = APIRouter(prefix="/recharge", tags=["Recharge"])
@@ -39,16 +45,24 @@ class AlipayRechargeCreateRequest(BaseModel):
 
 def generate_recharge_no() -> str:
     """Generate a unique recharge order number."""
-    return f"RCH{datetime.utcnow():%Y%m%d%H%M%S}{secrets.token_hex(4).upper()}"
+    return f"RCH{utc_now():%Y%m%d%H%M%S}{secrets.token_hex(4).upper()}"
 
 
-async def get_recharge_order_by_no(db: AsyncSession, recharge_no: str) -> RechargeOrder | None:
+async def get_recharge_order_by_no(
+    db: AsyncSession,
+    recharge_no: str,
+    *,
+    for_update: bool = False,
+) -> RechargeOrder | None:
     """Get recharge order by number with package loaded."""
-    result = await db.execute(
+    query = (
         select(RechargeOrder)
         .options(selectinload(RechargeOrder.package))
         .where(RechargeOrder.recharge_no == recharge_no)
     )
+    if for_update:
+        query = query.with_for_update()
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
@@ -57,7 +71,7 @@ async def list_recharge_packages(db: AsyncSession = Depends(get_db)):
     """List active recharge packages for users."""
     result = await db.execute(
         select(RechargePackage)
-        .where(RechargePackage.is_active == True)
+        .where(RechargePackage.is_active)
         .order_by(RechargePackage.sort_order.desc(), RechargePackage.amount.asc(), RechargePackage.id.asc())
     )
     return result.scalars().all()
@@ -70,10 +84,16 @@ async def create_recharge_order(
     current_user: User = Depends(get_current_user),
 ):
     """Create a pending recharge order from an active package."""
+    if order_data.payment_method != RechargePaymentMethod.ALIPAY:
+        raise HTTPException(
+            status_code=422,
+            detail="微信支付暂未开放，请使用支付宝",
+        )
+
     result = await db.execute(
         select(RechargePackage).where(
             RechargePackage.id == order_data.package_id,
-            RechargePackage.is_active == True,
+            RechargePackage.is_active,
         )
     )
     package = result.scalar_one_or_none()
@@ -163,7 +183,7 @@ async def cancel_recharge_order(
     current_user: User = Depends(get_current_user),
 ):
     """Cancel a pending recharge order."""
-    order = await get_recharge_order_by_no(db, recharge_no)
+    order = await get_recharge_order_by_no(db, recharge_no, for_update=True)
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -204,6 +224,11 @@ async def create_alipay_recharge_payment(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="无权支付该充值订单",
         )
+    if order.payment_method != RechargePaymentMethod.ALIPAY:
+        raise HTTPException(
+            status_code=422,
+            detail="充值订单支付渠道与支付宝不匹配",
+        )
     if order.status != RechargeOrderStatus.PENDING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -217,7 +242,7 @@ async def create_alipay_recharge_payment(
         total_amount=str(order.amount),
         subject=subject,
         return_url=f"{settings.SITE_URL}/wallet?payment_return=alipay&recharge_no={order.recharge_no}",
-        notify_url=f"{settings.SITE_URL}/api/v1/recharge/alipay/notify",
+        notify_url=f"{settings.API_PUBLIC_URL or settings.SITE_URL}/api/v1/recharge/alipay/notify",
     )
 
     return {
@@ -251,6 +276,17 @@ async def alipay_recharge_notify(
     if trade_status not in ("TRADE_SUCCESS", "TRADE_FINISHED"):
         return "success"
 
+    if not recharge_no or not trade_no:
+        return "failure"
+
+    if settings.ALIPAY_APP_ID and payload.get("app_id") != settings.ALIPAY_APP_ID:
+        return "failure"
+
+    try:
+        paid_amount = Decimal(str(payload.get("total_amount"))).quantize(Decimal("0.01"))
+    except (InvalidOperation, TypeError, ValueError):
+        return "failure"
+
     result = await db.execute(
         select(RechargeOrder)
         .where(RechargeOrder.recharge_no == recharge_no)
@@ -260,16 +296,17 @@ async def alipay_recharge_notify(
     if not order:
         return "failure"
 
-    if order.status == RechargeOrderStatus.PAID:
-        return "success"
+    expected_amount = Decimal(str(order.amount)).quantize(Decimal("0.01"))
+    if order.payment_method != RechargePaymentMethod.ALIPAY or paid_amount != expected_amount:
+        return "failure"
 
-    if order.status != RechargeOrderStatus.PENDING:
-        return "success"
+    if order.status == RechargeOrderStatus.PAID:
+        return "success" if order.trade_no == trade_no else "failure"
 
     order.status = RechargeOrderStatus.PAID
     order.trade_no = trade_no
     order.payment_raw = json.dumps(raw_payload, ensure_ascii=False)
-    order.paid_at = datetime.utcnow()
+    order.paid_at = utc_now()
 
     await credit_wallet(
         db,

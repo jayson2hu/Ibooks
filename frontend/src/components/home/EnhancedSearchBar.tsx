@@ -110,6 +110,7 @@ export default function EnhancedSearchBar({
         {/* 搜索按钮 */}
         <button
           type="submit"
+          aria-label="搜索"
           disabled={isLoading || !query.trim()}
           className="
             px-6 md:px-8 bg-gradient-to-r from-indigo-600 to-purple-600

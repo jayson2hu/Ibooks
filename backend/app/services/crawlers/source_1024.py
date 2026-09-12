@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+import hashlib
 from html import unescape
 import re
 
@@ -15,19 +16,26 @@ import httpx
 
 
 ARTICLE_PATTERN = re.compile(
-    r"<article\b[^>]*id=[\"']post-(?P<post_id>\d+)[\"'][^>]*>(?P<body>.*?)</article>",
+    r"<article\b(?P<attributes>[^>]*)>(?P<body>.*?)</article>",
     re.IGNORECASE | re.DOTALL,
 )
+POST_ID_ATTRIBUTE_PATTERN = re.compile(
+    r"\bid=[\"']post-(?P<post_id>\d+)[\"']",
+    re.IGNORECASE,
+)
 TITLE_PATTERN = re.compile(
-    r'<h2 class="entry-title">\s*<a[^>]*href=[\"\'](?P<url>[^\"\']+)[\"\'][^>]*>(?P<title>.*?)</a>',
+    r'<h2\b[^>]*class=[\"\'][^\"\']*\bentry-title\b[^\"\']*[\"\'][^>]*>'
+    r'\s*<a[^>]*href=[\"\'](?P<url>[^\"\']+)[\"\'][^>]*>(?P<title>.*?)</a>',
     re.IGNORECASE | re.DOTALL,
 )
 EXCERPT_PATTERN = re.compile(
-    r'<div class="entry-excerpt">(?P<excerpt>.*?)</div>',
+    r'<div\b[^>]*class=[\"\'][^\"\']*\b(?:entry-excerpt|entry-desc)\b[^\"\']*[\"\'][^>]*>'
+    r'(?P<excerpt>.*?)</div>',
     re.IGNORECASE | re.DOTALL,
 )
 CATEGORY_PATTERN = re.compile(
-    r'<span class="meta-category-dot">.*?<a[^>]*>(?P<category>.*?)</a>',
+    r'<(?:span|div)\b[^>]*class=[\"\'][^\"\']*\b(?:meta-category-dot|entry-cat-dot)\b'
+    r'[^\"\']*[\"\'][^>]*>.*?<a[^>]*>(?P<category>.*?)</a>',
     re.IGNORECASE | re.DOTALL,
 )
 TIME_PATTERN = re.compile(
@@ -36,6 +44,10 @@ TIME_PATTERN = re.compile(
 )
 IMAGE_DATA_SRC_PATTERN = re.compile(
     r"<img[^>]*\bdata-src=[\"\'](?P<image>[^\"\']+)[\"\']",
+    re.IGNORECASE | re.DOTALL,
+)
+BACKGROUND_DATA_PATTERN = re.compile(
+    r"<(?:a|div)\b[^>]*\bdata-bg=[\"\'](?P<image>[^\"\']+)[\"\']",
     re.IGNORECASE | re.DOTALL,
 )
 IMAGE_SRC_PATTERN = re.compile(
@@ -158,7 +170,8 @@ class Source1024Crawler:
         candidates: list[ExternalResourceCandidate] = []
 
         for match in ARTICLE_PATTERN.finditer(html):
-            post_id = match.group("post_id")
+            post_id_match = POST_ID_ATTRIBUTE_PATTERN.search(match.group("attributes"))
+            post_id = post_id_match.group("post_id") if post_id_match else ""
             body = match.group("body")
 
             title_match = TITLE_PATTERN.search(body)
@@ -203,7 +216,9 @@ class Source1024Crawler:
         match = POST_ID_FROM_URL_PATTERN.search(source_url)
         if match:
             return match.group("post_id")
-        return fallback_post_id
+        if fallback_post_id:
+            return fallback_post_id
+        return hashlib.sha256(source_url.encode("utf-8")).hexdigest()[:32]
 
     @staticmethod
     def _extract_optional_text(pattern: re.Pattern[str], body: str) -> str | None:
@@ -214,7 +229,11 @@ class Source1024Crawler:
 
     @staticmethod
     def _extract_image_url(body: str) -> str | None:
-        for pattern in (IMAGE_DATA_SRC_PATTERN, IMAGE_SRC_PATTERN):
+        for pattern in (
+            BACKGROUND_DATA_PATTERN,
+            IMAGE_DATA_SRC_PATTERN,
+            IMAGE_SRC_PATTERN,
+        ):
             match = pattern.search(body)
             if not match:
                 continue

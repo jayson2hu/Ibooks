@@ -1,12 +1,12 @@
 """
 Order endpoints.
 """
-from datetime import datetime
 from math import ceil
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -15,10 +15,11 @@ from app.dependencies import get_current_user
 from app.models.order import Order, OrderStatus, PaymentMethod
 from app.models.resource import Resource
 from app.models.user import User, UserRole
-from app.schemas.common import Message
 from app.schemas.order import OrderCreate, OrderListResponse, OrderResponse
 from app.models.wallet import CoinLedgerType
 from app.services.wallet import debit_wallet
+from app.services.resource_pricing import is_free_resource
+from app.utils.datetime_utils import utc_now
 
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -26,7 +27,7 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
 
 def generate_order_no() -> str:
     """Generate a unique order number."""
-    return f"ORD{datetime.utcnow():%Y%m%d%H%M%S}{secrets.token_hex(4).upper()}"
+    return f"ORD{utc_now():%Y%m%d%H%M%S}{secrets.token_hex(4).upper()}"
 
 
 async def get_order_by_no(
@@ -57,7 +58,7 @@ async def create_order(
     result = await db.execute(
         select(Resource).where(
             Resource.id == order_data.resource_id,
-            Resource.is_published == True
+            Resource.is_published
         )
     )
     resource = result.scalar_one_or_none()
@@ -80,8 +81,13 @@ async def create_order(
             detail="Resource already purchased"
         )
 
-    is_free = resource.is_free or resource.coin_price == 0
+    is_free = is_free_resource(resource)
     coin_amount = 0 if is_free else resource.coin_price
+    if not is_free and coin_amount <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="该资源尚未配置有效的书币价格",
+        )
     new_order = Order(
         order_no=generate_order_no(),
         user_id=current_user.id,
@@ -90,11 +96,18 @@ async def create_order(
         coin_amount=coin_amount,
         payment_method=PaymentMethod.FREE if is_free else PaymentMethod.COIN,
         status=OrderStatus.PAID,
-        paid_at=datetime.utcnow(),
+        paid_at=utc_now(),
     )
 
     db.add(new_order)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Resource already purchased",
+        ) from None
 
     if not is_free:
         await debit_wallet(

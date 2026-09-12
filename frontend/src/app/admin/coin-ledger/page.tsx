@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { api, getApiErrorMessage } from '@/lib/api';
 import type { AdminCoinLedger, CoinLedgerType, PaginatedResponse } from '@/types';
 
 const typeLabels: Record<CoinLedgerType, string> = {
@@ -26,31 +26,35 @@ export default function AdminCoinLedgerPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    const loadEntries = async (targetPage = page) => {
+    const loadEntries = useCallback(async (
+        targetPage: number,
+        selectedType: string,
+        selectedUserId: string,
+    ) => {
         setLoading(true);
         setError('');
         try {
             const response = await api.admin.getCoinLedger({
                 page: targetPage,
                 page_size: 20,
-                type: type || undefined,
-                user_id: userId || undefined,
+                type: selectedType || undefined,
+                user_id: selectedUserId || undefined,
             });
             const data = response.data as PaginatedResponse<AdminCoinLedger>;
             setEntries(data.items);
             setPage(data.page);
             setPages(data.pages);
             setTotal(data.total);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '流水加载失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '流水加载失败'));
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        loadEntries(1);
-    }, []);
+        void loadEntries(1, '', '');
+    }, [loadEntries]);
 
     return (
         <div className="space-y-6">
@@ -72,7 +76,7 @@ export default function AdminCoinLedgerPage() {
                     placeholder="用户 ID"
                     className="rounded-lg border border-gray-300 px-3 py-2"
                 />
-                <button onClick={() => loadEntries(1)} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">筛选</button>
+                <button onClick={() => loadEntries(1, type, userId)} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">筛选</button>
             </div>
 
             <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -118,8 +122,8 @@ export default function AdminCoinLedgerPage() {
             <div className="flex items-center justify-between text-sm text-gray-600">
                 <span>第 {page} / {pages || 1} 页，共 {total} 条</span>
                 <div className="flex gap-2">
-                    <button disabled={page <= 1 || loading} onClick={() => loadEntries(page - 1)} className="rounded-lg border px-4 py-2 disabled:opacity-50">上一页</button>
-                    <button disabled={page >= pages || loading} onClick={() => loadEntries(page + 1)} className="rounded-lg border px-4 py-2 disabled:opacity-50">下一页</button>
+                    <button disabled={page <= 1 || loading} onClick={() => loadEntries(page - 1, type, userId)} className="rounded-lg border px-4 py-2 disabled:opacity-50">上一页</button>
+                    <button disabled={page >= pages || loading} onClick={() => loadEntries(page + 1, type, userId)} className="rounded-lg border px-4 py-2 disabled:opacity-50">下一页</button>
                 </div>
             </div>
         </div>

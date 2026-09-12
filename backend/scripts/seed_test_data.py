@@ -1,6 +1,10 @@
 """
 测试数据生成脚本
 用于创建分类、资源和联系方式的测试数据
+
+仅用于 DEBUG 环境。非交互运行必须显式设置：
+IBOOKS_TEST_DATA_CONFIRM=SEED_TEST_DATA
+IBOOKS_TEST_ADMIN_PASSWORD=<non-production password>
 """
 import asyncio
 import sys
@@ -9,17 +13,32 @@ from pathlib import Path
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import AsyncSessionLocal
-from app.models.category import Category
-from app.models.resource import Resource
-from app.models.contact import Contact
-from app.models.user import User
-from app.utils.security import get_password_hash
+from app.config import settings  # noqa: E402
+from app.database import AsyncSessionLocal  # noqa: E402
+from app.models.category import Category  # noqa: E402
+from app.models.contact import Contact  # noqa: E402
+from app.models.resource import Resource  # noqa: E402
+from app.models.user import User  # noqa: E402
+from app.scripts.secure_inputs import read_secret, require_confirmation  # noqa: E402
+from app.utils.security import get_password_hash  # noqa: E402
 
 
 async def create_test_data():
     """创建测试数据"""
+    if not settings.DEBUG:
+        raise RuntimeError("Refusing to seed test data while DEBUG=false")
+
+    require_confirmation(
+        "IBOOKS_TEST_DATA_CONFIRM",
+        expected="SEED_TEST_DATA",
+        prompt="Type SEED_TEST_DATA to populate the current database: ",
+    )
+    test_admin_password = read_secret(
+        "IBOOKS_TEST_ADMIN_PASSWORD",
+        prompt="Test admin password: ",
+        confirmation_prompt="Confirm test admin password: ",
+    )
+
     async with AsyncSessionLocal() as session:
         try:
             # 1. 创建管理员用户
@@ -28,14 +47,15 @@ async def create_test_data():
             admin = User(
                 email="admin@example.com",
                 username="admin",
-                password_hash=get_password_hash("admin123"),
+                password_hash=get_password_hash(test_admin_password),
                 role=UserRole.ADMIN,
                 status=UserStatus.ACTIVE,
                 is_email_verified=True
             )
             session.add(admin)
             await session.flush()
-            print("✅ 管理员创建成功 - 邮箱: admin@example.com, 密码: admin123")
+            print("✅ 管理员创建成功 - 邮箱: admin@example.com")
+            print("   测试密码已安全提供，不会输出到终端。")
 
             # 2. 创建分类
             print("\n📚 创建分类...")
@@ -282,9 +302,9 @@ async def create_test_data():
                     "type": ContactType.WECHAT_QR,
                     "label": "微信二维码",
                     "value": "扫码添加客服微信",
-                    "qr_code_url": "/images/wechat-qr.jpg",
+                    "qr_code_url": None,
                     "is_copyable": False,
-                    "is_active": True,
+                    "is_active": False,
                     "display_order": 2,
                     "show_in_footer": True,
                     "show_in_contact_page": True
@@ -348,10 +368,10 @@ async def create_test_data():
             print("\n🎉 所有测试数据创建成功！")
             print("\n" + "="*50)
             print("📋 数据汇总:")
-            print(f"  - 管理员账号: admin@example.com / admin123")
+            print("  - 管理员账号: admin@example.com")
             print(f"  - 分类数量: {len(categories)}")
             print(f"  - 资源数量: {len(resources_data)}")
-            print(f"  - 联系方式: 已配置")
+            print("  - 联系方式: 已配置")
             print("="*50)
 
         except Exception as e:

@@ -1,38 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import CopyButton from '@/components/common/CopyButton';
+import { useSiteSettings } from '@/contexts/SiteSettingsContext';
+import type { Contact } from '@/types';
 
 export default function Footer() {
-    const [copyrightText, setCopyrightText] = useState('© 2025 资源市场. 保留所有权利.');
-    const [brandText, setBrandText] = useState('提供优质的电子书、视频课程和技术文档，助力您的学习和成长。');
+    const { copyrightText, footerBrandText, siteName, siteDescription } = useSiteSettings();
+    const [contacts, setContacts] = useState<Contact[]>([]);
 
     useEffect(() => {
-        // Fetch copyright text from settings
-        const fetchSettings = async () => {
-            try {
-                const response = await api.settings.get('copyright_text');
-                if (response.data?.value) {
-                    setCopyrightText(response.data.value);
-                }
-            } catch (error) {
-                console.error('Failed to fetch copyright text:', error);
-                // Keep default value on error
-            }
-
-            try {
-                const response = await api.settings.get('footer_brand_text');
-                if (response.data?.value) {
-                    setBrandText(response.data.value);
-                }
-            } catch (error) {
-                console.error('Failed to fetch brand text:', error);
-                // Keep default value on error
-            }
-        };
-
-        fetchSettings();
+        api.contacts.list(true)
+            .then((response) => setContacts((response.data || []).filter((contact) => contact.show_in_footer)))
+            .catch((error) => console.error('Failed to fetch footer contacts:', error));
     }, []);
 
     return (
@@ -42,10 +24,13 @@ export default function Footer() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                     {/* Brand */}
                     <div>
-                        <div className="text-2xl font-bold mb-4">📚 资源市场</div>
+                        <div className="text-2xl font-bold mb-4">📚 {siteName}</div>
                         <p className="text-gray-400 text-sm">
-                            {brandText}
+                            {siteDescription}
                         </p>
+                        {footerBrandText !== siteDescription && (
+                            <p className="mt-2 text-xs text-gray-500">{footerBrandText}</p>
+                        )}
                     </div>
 
                     {/* Quick Links */}
@@ -115,17 +100,21 @@ export default function Footer() {
             <div className="border-t border-gray-800">
                 <div className="container py-6">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-400">
-                        <p>{copyrightText}</p>
-                        <div className="flex gap-6">
-                            <a href="#" className="hover:text-white transition-colors">
-                                微信
-                            </a>
-                            <a href="#" className="hover:text-white transition-colors">
-                                QQ
-                            </a>
-                            <a href="#" className="hover:text-white transition-colors">
-                                邮箱
-                            </a>
+                        <p>
+                            {copyrightText || `© ${new Date().getFullYear()} ${siteName}. 保留所有权利.`}
+                        </p>
+                        <div className="flex flex-wrap gap-4">
+                            {contacts.slice(0, 4).map((contact) => (
+                                contact.is_clickable && contact.link_url ? (
+                                    <a key={contact.id} href={contact.link_url} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                                        {contact.label}
+                                    </a>
+                                ) : contact.is_copyable ? (
+                                    <CopyButton key={contact.id} value={contact.value} label={contact.label} className="hover:text-white transition-colors" />
+                                ) : (
+                                    <span key={contact.id}>{contact.label}: {contact.value}</span>
+                                )
+                            ))}
                         </div>
                     </div>
                 </div>

@@ -1,59 +1,98 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import ResourceCover from '@/components/common/ResourceCover';
+import type { AdminResourceListParams, Category, Resource } from '@/types';
 
-export default function ResourceManagement() {
-    const [resources, setResources] = useState<any[]>([]);
+const PAGE_SIZE = 10;
+type PublicationFilter = 'all' | 'published' | 'draft';
+
+function ResourceManagementContent() {
+    const searchParams = useSearchParams();
+    const searchFromUrl = searchParams.get('search') || '';
+    const [resources, setResources] = useState<Resource[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
-    const [search, setSearch] = useState('');
+    const [pages, setPages] = useState(0);
+    const [search, setSearch] = useState(searchFromUrl);
+    const [categoryId, setCategoryId] = useState('');
+    const [publicationFilter, setPublicationFilter] = useState<PublicationFilter>('all');
+    const [loadError, setLoadError] = useState('');
+    const [categoryError, setCategoryError] = useState('');
 
-    const fetchResources = async () => {
-        setLoading(true);
-        try {
-            const response = await api.resources.list({
-                page,
-                page_size: 10,
-                search: search
+    const categoryNames = useMemo(
+        () => new Map(categories.map((category) => [category.id, category.name])),
+        [categories],
+    );
+
+    useEffect(() => {
+        setPage(1);
+        setSearch(searchFromUrl);
+    }, [searchFromUrl]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setCategoryError('');
+
+        api.categories.list(false)
+            .then((response) => {
+                if (!cancelled) {
+                    setCategories(response.data);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setCategories([]);
+                    setCategoryError('分类加载失败，暂时无法按分类筛选。');
+                }
             });
-            console.log('Admin API Response:', response.data); // 调试日志
-            
-            // 处理不同的响应结构
-            let resourcesData = [];
-            let totalCount = 0;
-            
-            if (response.data.items && Array.isArray(response.data.items)) {
-                resourcesData = response.data.items;
-                totalCount = response.data.total || response.data.count || 0;
-            } else if (Array.isArray(response.data)) {
-                resourcesData = response.data;
-                totalCount = response.data.length;
-            } else if (response.data.data && Array.isArray(response.data.data)) {
-                resourcesData = response.data.data;
-                totalCount = response.data.total || response.data.count || 0;
-            } else {
-                console.warn('Unexpected API response structure:', response.data);
-                resourcesData = [];
-                totalCount = 0;
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const fetchResources = useCallback(async () => {
+        setLoading(true);
+        setLoadError('');
+        try {
+            const params: AdminResourceListParams = {
+                page,
+                page_size: PAGE_SIZE,
+            };
+            const normalizedSearch = search.trim();
+            if (normalizedSearch) {
+                params.search = normalizedSearch;
             }
-            
-            setResources(resourcesData);
-            setTotal(totalCount);
-        } catch (error) {
-            console.error('Failed to fetch resources:', error);
-            setResources([]); // 确保设置为空数组
+            if (categoryId) {
+                params.category_id = Number(categoryId);
+            }
+            if (publicationFilter !== 'all') {
+                params.is_published = publicationFilter === 'published';
+            }
+
+            const response = await api.admin.getResources(params);
+            setResources(response.data.items);
+            setTotal(response.data.total);
+            setPages(response.data.pages);
+        } catch {
+            setResources([]);
             setTotal(0);
+            setPages(0);
+            setLoadError('资源加载失败，请稍后重试。');
         } finally {
             setLoading(false);
         }
-    };
+    }, [categoryId, page, publicationFilter, search]);
 
     useEffect(() => {
         fetchResources();
-    }, [page, search]);
+    }, [fetchResources]);
 
     const handleDelete = async (id: number) => {
         if (!confirm('确定要删除这个资源吗？此操作不可恢复。')) return;
@@ -85,23 +124,65 @@ export default function ResourceManagement() {
                 <div className="flex-1">
                     <input
                         type="text"
+                        aria-label="搜索资源标题"
                         placeholder="搜索资源标题..."
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(event) => {
+                            setPage(1);
+                            setSearch(event.target.value);
+                        }}
                         className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-primary"
                     />
                 </div>
-                <select className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-primary bg-white">
+                <select
+                    aria-label="按分类筛选"
+                    value={categoryId}
+                    onChange={(event) => {
+                        setPage(1);
+                        setCategoryId(event.target.value);
+                    }}
+                    className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-primary bg-white"
+                >
                     <option value="">所有分类</option>
-                    <option value="ebook">电子书</option>
-                    <option value="course">视频课程</option>
+                    {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                            {category.name}
+                        </option>
+                    ))}
                 </select>
-                <select className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-primary bg-white">
-                    <option value="">所有状态</option>
+                <select
+                    aria-label="按发布状态筛选"
+                    value={publicationFilter}
+                    onChange={(event) => {
+                        setPage(1);
+                        setPublicationFilter(event.target.value as PublicationFilter);
+                    }}
+                    className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-primary bg-white"
+                >
+                    <option value="all">所有状态</option>
                     <option value="published">已发布</option>
                     <option value="draft">草稿</option>
                 </select>
             </div>
+
+            {categoryError && (
+                <div role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                    {categoryError}
+                </div>
+            )}
+
+            {loadError && (
+                <div role="alert" className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <span>{loadError}</span>
+                    <button
+                        type="button"
+                        onClick={fetchResources}
+                        className="font-medium underline underline-offset-2"
+                    >
+                        重新加载
+                    </button>
+                </div>
+            )}
 
             {/* Table */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
@@ -125,7 +206,7 @@ export default function ResourceManagement() {
                                     加载中...
                                 </td>
                             </tr>
-                        ) : !Array.isArray(resources) || resources.length === 0 ? (
+                        ) : resources.length === 0 ? (
                             <tr>
                                 <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                                     暂无数据
@@ -137,17 +218,11 @@ export default function ResourceManagement() {
                                     <td className="px-6 py-4 text-gray-500">#{resource.id}</td>
                                     <td className="px-6 py-4">
                                         <div className="w-12 h-16 bg-gray-100 rounded overflow-hidden">
-                                            {resource.cover_image_url ? (
-                                                <img
-                                                    src={resource.cover_image_url}
-                                                    alt={resource.title}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                                    📷
-                                                </div>
-                                            )}
+                                            <ResourceCover
+                                                src={resource.cover_image_url}
+                                                alt={resource.title}
+                                                className="w-full h-full object-cover"
+                                            />
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -160,7 +235,9 @@ export default function ResourceManagement() {
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded-full">
-                                            {resource.category?.name || '未分类'}
+                                            {resource.category_id
+                                                ? categoryNames.get(resource.category_id) || '未分类'
+                                                : '未分类'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 font-medium text-orange-500">
@@ -218,7 +295,7 @@ export default function ResourceManagement() {
                         {page}
                     </span>
                     <button
-                        disabled={!Array.isArray(resources) || resources.length < 10}
+                        disabled={pages === 0 || page >= pages}
                         onClick={() => setPage(p => p + 1)}
                         className="px-4 py-2 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50"
                     >
@@ -227,5 +304,13 @@ export default function ResourceManagement() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function ResourceManagement() {
+    return (
+        <Suspense fallback={<div className="py-8 text-center text-gray-500">正在加载资源...</div>}>
+            <ResourceManagementContent />
+        </Suspense>
     );
 }

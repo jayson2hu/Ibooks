@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 from app.database import get_db
-from app.dependencies import get_current_admin
+from app.dependencies import get_current_staff
 from app.schemas.contact import ContactCreate, ContactUpdate, ContactResponse
 from app.schemas.common import Message
 from app.models.contact import Contact
@@ -28,7 +28,7 @@ async def list_contacts(
     query = select(Contact).order_by(Contact.display_order)
     
     if active_only:
-        query = query.where(Contact.is_active == True)
+        query = query.where(Contact.is_active)
     
     result = await db.execute(query)
     contacts = result.scalars().all()
@@ -55,7 +55,7 @@ async def get_contact(contact_id: int, db: AsyncSession = Depends(get_db)):
 async def create_contact(
     contact_data: ContactCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_admin)
+    current_user = Depends(get_current_staff)
 ):
     """Create a new contact (Admin only)."""
     new_contact = Contact(**contact_data.model_dump())
@@ -72,7 +72,7 @@ async def update_contact(
     contact_id: int,
     contact_data: ContactUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_admin)
+    current_user = Depends(get_current_staff)
 ):
     """Update a contact (Admin only)."""
     result = await db.execute(select(Contact).where(Contact.id == contact_id))
@@ -99,7 +99,7 @@ async def update_contact(
 async def delete_contact(
     contact_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_admin)
+    current_user = Depends(get_current_staff)
 ):
     """Delete a contact (Admin only)."""
     result = await db.execute(select(Contact).where(Contact.id == contact_id))

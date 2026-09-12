@@ -1,6 +1,42 @@
-# iBooks 数字资源售卖平台 - 项目待办事项清单
+# iBooks 数字资源售卖平台 - 项目待办事项清单（历史快照）
 
 > 基于 2026-04-27 项目代码审计整理，对照 `ibooks.md` 需求文档逐项核查。
+
+> **历史快照说明（2026-09-10）**：下方“一”至“十”章节保留的是 2026-04-27 审计现场，未勾选项不代表当前仍缺失，不应继续作为实施清单。当前状态以本节、`DEV_PLAN.md` 和实际测试结果为准。
+
+## 当前真实状态（2026-09-12 复核）
+
+本次核对实现和文档，并重新通过前端 Jest `33 suites / 104 tests`、TypeScript、ESLint、后端 Ruff 和 `pip check`。以下完整验收证据来自 2026-09-10；后端全量覆盖率、构建、迁移、浏览器及漏洞审计未在本次重跑。最新进度与远程归档目标见 `DEV_PLAN.md` 的 2026-09-12 记录。
+
+### 已完成并有验证证据
+
+- [x] 生产配置校验、schema bootstrap、审计落库、批量上传安全已修复。
+- [x] 搜索过滤草稿、爬虫默认草稿且不覆盖人工发布状态已修复。
+- [x] 爬虫批量查重、数据库来源唯一约束、Redis 跨进程租约与真实运行状态恢复已完成。
+- [x] moderator/admin 权限分层、订单并发防重复扣币、邮件一致性已修复。
+- [x] `SEO_AUTO_GENERATE` 已接入启动生命周期，只生成本地 SEO 文件且不会隐式外部提交。
+- [x] 资源交付边界已收敛：`GET /resources/{slug}/access` 只返回 `has_access`，`POST /download` 才返回交付字段并原子计数。
+- [x] 公开设置仅返回白名单展示键的 `key/value`，后台分类、说明、更新时间与更新人不会泄露。
+- [x] Access/refresh token 分离轮换及多标签页竞态已修复，旧请求不会清除其他标签页的新凭据。
+- [x] `POST /seo/generate-all` 等待真实生成结果，成功返回文件清单，部分失败返回安全的成功/失败明细。
+- [x] FAQ、联系方式、分类与分类资源已区分加载失败和真实空态，并提供明确错误提示/重试路径。
+- [x] `/admin/users` 已统一为 `items/total/page/page_size/pages` 当前分页对象契约。
+- [x] 后端生产依赖与 `requirements-dev.txt` 质量门禁依赖已拆分，依赖漏洞审计无已知漏洞。
+- [x] 前端 Next.js `15.5.25`，Jest `33 suites / 104 tests passed`，TypeScript、ESLint、完整生产构建与 `npm audit` 通过，`npm audit` 为 0 已知漏洞。
+- [x] 10 个公开路由分别以桌面与 375px 视口验收，共 20 组；均 HTTP 200，`brokenImages`、控制台错误、失败响应为 0，且 `scrollWidth === innerWidth`。
+- [x] 浏览器验收中已修复历史封面与 `/og-image`，并停用 seed 数据中的无效二维码。
+- [x] 后端最新全量质量门禁 `292 passed`，总覆盖率 `72.42%`（约 `72%`，门槛 70%），Ruff、`pip check` 与 `pip-audit` 通过，依赖审计为 0 已知漏洞。
+- [x] Alembic 全新数据库 `upgrade -> downgrade -1 -> upgrade` 与 `alembic check` 通过，paid 订单部分唯一索引与爬虫来源唯一约束已验证。
+
+### 当前真实剩余项与外部阻塞
+
+- [ ] 支付宝沙箱：缺少/尚未使用真实沙箱凭据完成充值跳转、异步回调和到账验证。
+- [ ] 百度与 SMTP：需要真实凭据和公网环境完成 URL 推送、邮件投递联调。
+- [ ] Docker 全容器验收：尚未使用必需的显式密钥与公网 URL 完成整套生产式服务及 Grafana 联动验收；Docker Hub 拉取超时是 2026-09-10 记录的外部环境问题，本次未重测。
+- [ ] Google Search Console / 360 自动提交：仅在产品仍要求时继续实现并做真实平台联调。
+- [ ] 运行边界：多 worker crawler scheduler 仍有重复轮询开销；生产库若已有重复来源数据，来源唯一约束迁移前需人工清理。
+
+> 最新测试口径：隔离测试数据库与 Redis 后执行完整质量门禁，结果为 `292 passed`、总覆盖率 `72.42%`，满足 70% 发布门槛；Ruff、`pip check`、`pip-audit` 及 Alembic 往返/一致性检查均通过。前端为 `33 suites / 104 tests passed`，TypeScript、ESLint、完整生产构建与 `npm audit` 通过且审计为 0 已知漏洞；10 个公开路由的桌面/375px 共 20 组浏览器回归全部通过。
 
 ---
 

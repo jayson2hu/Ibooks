@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 from app.database import get_db
-from app.dependencies import get_current_admin
+from app.dependencies import get_current_staff
 from app.schemas.faq import FAQCreate, FAQUpdate, FAQResponse
 from app.schemas.common import Message
 from app.models.faq import FAQ
@@ -30,7 +30,7 @@ async def list_faqs(
     query = select(FAQ).order_by(FAQ.category, FAQ.display_order)
     
     if active_only:
-        query = query.where(FAQ.is_active == True)
+        query = query.where(FAQ.is_active)
     
     if category:
         query = query.where(FAQ.category == category)
@@ -60,7 +60,7 @@ async def get_faq(faq_id: int, db: AsyncSession = Depends(get_db)):
 async def create_faq(
     faq_data: FAQCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_admin)
+    current_user = Depends(get_current_staff)
 ):
     """Create a new FAQ (Admin only)."""
     new_faq = FAQ(**faq_data.model_dump())
@@ -77,7 +77,7 @@ async def update_faq(
     faq_id: int,
     faq_data: FAQUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_admin)
+    current_user = Depends(get_current_staff)
 ):
     """Update a FAQ (Admin only)."""
     result = await db.execute(select(FAQ).where(FAQ.id == faq_id))
@@ -104,7 +104,7 @@ async def update_faq(
 async def delete_faq(
     faq_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_admin)
+    current_user = Depends(get_current_staff)
 ):
     """Delete a FAQ (Admin only)."""
     result = await db.execute(select(FAQ).where(FAQ.id == faq_id))

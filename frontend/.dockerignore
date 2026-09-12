@@ -1,0 +1,31 @@
+# Source control and editor metadata
+.git
+.github
+.vscode
+.idea
+
+# Local environment and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+*.key
+*.pem
+
+# Dependencies, caches, and build output
+node_modules
+.next
+.turbo
+.vercel
+coverage
+dist
+build
+out
+*.tsbuildinfo
+.eslintcache
+
+# Development-only files
+__tests__
+*.log
+.DS_Store
+Thumbs.db

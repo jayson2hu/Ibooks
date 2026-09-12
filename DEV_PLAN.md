@@ -1,6 +1,6 @@
 # iBooks 开发计划
 
-> 文档版本: v1.1 | 创建日期: 2026-04-27 | 状态: 进行中
+> 文档版本: v1.5 | 创建日期: 2026-04-27 | 最后更新: 2026-09-12 | 状态: 核心业务及本地验收完成，生产联调待完成
 
 本文档是交给 Codex 执行的完整开发任务清单。每个功能独立成块，包含：背景说明、具体任务、测试要求、验收标准，以及进度记录。
 
@@ -36,13 +36,75 @@
 | F08 | 支付集成（支付宝/微信支付） | P1 | 🔁 方向调整 | 2 天 |
 | F09 | 前端购买流程 | P1 | 🔁 方向调整 | 1.5 天 |
 | F10 | 安全加固（限流 + Token 刷新 + 登出） | P2 | ✅ 已验收 | 1 天 |
-| F11 | 监控补全（Grafana + Promtail 配置） | P2 | ✅ 已验收 | 0.5 天 |
+| F11 | 监控补全（Grafana + Promtail 配置） | P2 | 🟡 配置完成，运行验收待执行 | 0.5 天 |
 | F12 | 后端测试补全 | P2 | ✅ 已验收 | 1.5 天 |
-| F13 | 前端测试补全 | P2 | ⬜ 未开始 | 1 天 |
-| F14 | SEO 自动提交（百度/Google） | P3 | ⬜ 未开始 | 0.5 天 |
-| F15 | 前端体验优化（分类筛选 + 移动端 + 联系方式展示） | P3 | ⬜ 未开始 | 1 天 |
+| F13 | 前端测试补全 | P2 | ✅ 已验收 | 1 天 |
+| F14 | SEO 自动提交（百度已实现；Google/360 待产品确认） | P3 | 🟡 代码完成，外部联调待验收 | 0.5 天 |
+| F15 | 前端体验优化（分类筛选 + 移动端 + 联系方式展示） | P3 | ✅ 已验收 | 1 天 |
 
 **状态标记**: ⬜ 未开始 | 🔵 开发中 | 🟡 待测试 | ✅ 已验收 | ❌ 有问题 | 🔁 方向调整
+
+---
+
+## 2026-09-12 进度复核与远程归档
+
+本次对照代码、测试文件及项目文档复核进度，整理上一轮已完成的改动并提交到现有 GitHub 仓库。核心业务已实现，生产外部联调仍未完成；下方 2026-04-27 至 2026-09-10 的记录保留其原始验收日期。
+
+- 已完成：账户与角色权限、资源与分类管理、搜索筛选、批量导入、钱包与不可变流水、签到、书币购买、资源授权交付、充值订单、爬虫管理及去重、SEO 本地生成、站点设置和公开页错误处理。
+- 本次重新验证：前端 Jest `33 suites / 104 tests passed`、TypeScript、ESLint、后端 Ruff、`pip check` 及 Git 差异格式检查通过。
+- 沿用历史证据：2026-09-10 后端完整测试 `292 passed`、覆盖率 `72.42%`，生产构建、Alembic 往返与一致性检查、20 组浏览器检查及零已知漏洞审计。本次未重新执行这些完整验收或重新查询漏洞数据库。
+- 仍待完成：真实支付宝沙箱充值与回调到账、真实 SMTP 投递、百度公网推送、完整 Compose 与 Grafana/Prometheus/Loki 联合验收。Docker Hub 超时是上次记录的环境问题，本次未重测。
+- 待产品确认：Google Search Console / 360 自动提交；当前未实现平台提交服务。
+- 归档目标：现有 `origin` 仓库 `https://github.com/jayson2hu/Ibooks.git`，分支 `codex/project-closeout-20260912`；包含原有 3 个本地提交及本轮整理的代码、测试、迁移和文档。推送结果以远程分支与本地提交一致为准。
+- 提交范围检查：真实 `.env`、数据库、运行日志、依赖目录和 `.codex-run` 留在本地，配置示例随代码提交。
+
+### 后续优化与现有行为
+
+- 浏览器令牌仍保存在 `localStorage`；后续可评估改为 HttpOnly Cookie。
+- 登出会撤销该用户所有设备的会话。
+- 验证邮件链接 24 小时过期，目前没有重发验证邮件入口。
+
+## 2026-09-10 收尾状态（历史验收基线）
+
+### 已完成的代码与可靠性修复
+
+- 生产配置校验、数据库 schema bootstrap 和迁移链路已收敛。
+- 审计日志改为独立会话可靠落库，并补齐安全字段处理和查询校验。
+- 批量上传已补齐大小限制、临时文件安全命名、异常清理与路径穿越防护。
+- 公开搜索只返回已发布资源；爬虫新资源默认进入草稿，后续同步不会覆盖人工发布/下架状态。
+- 爬虫资源查重已改为批量查询，来源身份由数据库唯一约束兜底，并使用 Redis 跨进程租约、续租和 owner 校验释放，避免多 worker 重复执行。
+- `moderator` 与 `admin` 权限已分层，前后端路由与菜单保持一致。
+- 资源订单增加“同一用户、同一资源仅一条 paid 订单”的数据库约束，避免并发重复扣币。
+- 邮件任务与接口响应的一致性、失败处理已修复。
+- `SEO_AUTO_GENERATE` 已接入应用生命周期：开启时仅在本地生成 sitemap、RSS 和 robots，失败不会阻止服务启动，也不会触发百度/Google/360 外部提交。
+- 资源交付职责已拆分：`GET /resources/{slug}/access` 仅做无副作用权限检查并返回 `has_access`；`POST /resources/{slug}/download` 才交付云盘字段并原子增加下载计数。
+- 公开设置响应已最小化为白名单展示键的 `key/value`，不再向匿名请求暴露分类、说明、更新时间或更新人等后台元数据。
+- 独立 access/refresh token 轮换已补齐多标签页竞态处理：过时请求的 401 或旧 refresh 失败不会清除其他标签页已更新的凭据。
+- `POST /seo/generate-all` 已从“仅返回已启动”改为等待实际结果；成功返回文件清单，部分失败返回不含内部异常信息的 500 与成功/失败文件明细。
+- FAQ、联系方式、分类及分类资源页面已区分加载失败与真实空数据，错误态提供明确提示和可用时的重试操作。
+- `/admin/users` 当前唯一列表契约已统一为 `items/total/page/page_size/pages` 分页对象，前端分页状态按服务端元数据驱动。
+- 后端依赖已拆分为生产 `requirements.txt` 与本地质量门禁 `requirements-dev.txt`，当前依赖漏洞审计为 0 已知漏洞。
+- Compose 配置已补齐默认 loopback 绑定、非 root 应用容器、命名卷、监控保留期和 Docker 日志轮转；这些是静态配置成果，完整运行验收仍单独保留为未完成项。
+
+### 2026-09-10 质量门禁证据
+
+- 前端：已升级到 Next.js `15.5.25`，锁文件解析 Axios `1.20.0`、PostCSS `8.5.28`；lint 脚本使用 ESLint CLI。Jest `33 suites / 104 tests passed`，TypeScript、ESLint、完整生产构建与 `npm audit` 均通过，`npm audit` 为 0 已知漏洞。
+- 浏览器：10 个公开路由分别以桌面与 375px 视口验收，共 20 组；全部 HTTP 200，`brokenImages`、控制台错误和失败响应均为 0，且 `scrollWidth === innerWidth`。验收过程中已修复历史封面与 `/og-image`，并停用 seed 数据中的无效二维码。
+- 后端：最新全量质量门禁 `292 passed`，总覆盖率 `72.42%`（约 `72%`，门槛 70%）；Ruff、`pip check`、`pip-audit` 均通过，依赖审计为 0 已知漏洞。
+- 数据库：从全新数据库执行 `upgrade -> downgrade -1 -> upgrade` 往返通过，`alembic check` 无待生成迁移；paid 订单部分唯一索引、爬虫来源唯一约束及其升级/回滚行为已验证。
+
+### 仍未完成的验收或外部联调
+
+- [ ] 使用支付宝沙箱真实凭据完成充值跳转、异步回调和到账联调。
+- [ ] 使用百度站长平台与 SMTP 真实凭据，在公网可回调/可投递环境完成联调。
+- [ ] 完整生产式 Compose 与 Grafana/Prometheus/Loki 联合验收尚未完成；2026-09-10 记录的 Docker Hub 镜像拉取超时属于部署主机网络/镜像源外部阻塞，2026-09-12 未重测。
+- [ ] 若产品仍要求 Google Search Console / 360 自动提交，需要补充实现及真实平台联调。
+
+### 已知运行边界（非当前功能缺失）
+
+- 多 worker 会各自轮询 crawler scheduler，正确性由 Redis 租约保护，但仍有额外轮询开销。
+- Redis 租约与数据库最终提交不是同一原子事务，极端故障时仍存在很小的接管窗口。
+- 若生产库在来源唯一约束迁移前已存在重复来源数据，迁移会中止并要求人工清理；绕过 API 直接并发写来源字段也可能使整批事务因唯一冲突回滚。
 
 ---
 
@@ -55,7 +117,7 @@
 | N02 | 资源订单改为站内币支付 | P0 | ✅ 已验收 | 1.5 天 |
 | N03 | 签到系统（开关 + 奖励币） | P1 | ✅ 已验收 | 1 天 |
 | N04 | 充值订单与充值套餐 | P1 | ✅ 已验收 | 1.5 天 |
-| N05 | 第三方支付改为充值渠道 | P1 | 🟡 待测试 | 2 天 |
+| N05 | 第三方支付改为充值渠道 | P1 | 🟡 代码及自动化测试完成，真实沙箱待验收 | 2 天 |
 | N06 | 前端钱包、充值、站内币购买流程 | P1 | ✅ 完成 | 2 天 |
 | N07 | 后台资产管理与签到配置 | P1 | ✅ 已验收 | 1.5 天 |
 | N08 | 全链路测试、文档与旧流程收敛 | P0 | ✅ 已验收 | 1 天 |
@@ -253,13 +315,14 @@ POST /api/v1/orders
 ### N02-T3：资源访问权限复用 paid 订单
 
 **任务**:
-1. `/resources/{slug}/access` 继续只认 paid 订单。
+1. `/resources/{slug}/access` 继续只认 paid 订单，但只返回 `has_access`。
 2. paid 订单来源可以是 free 或 coin。
-3. 更新测试覆盖“站内币购买后可访问云盘链接”。
+3. `/resources/{slug}/download` 复用相同权限策略，显式交付云盘字段并计数。
+4. 更新测试覆盖“站内币购买后可检查权限并显式获取云盘链接”。
 
 **小功能自测**:
 - [x] 未购买付费资源返回 402。
-- [x] 站内币购买成功后返回 cloud_link/access_code。
+- [x] 站内币购买成功后 `GET /access` 返回 `has_access=true`，`POST /download` 返回 `cloud_link/access_code`。
 
 ### N02 大功能验收标准
 
@@ -900,7 +963,7 @@ command: >
 - [x] README.md 数据库初始化说明更新
 - [x] 更新本文档 F02 状态为 ✅
 
-**测试记录**: 2026-04-27，使用本地 conda `py311` 环境和临时 SQLite 数据库验证 `alembic upgrade head`、`alembic downgrade -1`、再次 `alembic upgrade head` 均成功；升级后包含 `users, resources, categories, contacts, faqs, audit_logs, site_settings` 7 张业务表。`docker-compose config` 解析通过。当前本机 `localhost:5432` 无 PostgreSQL 响应、Docker daemon 未运行，未进行真实 PostgreSQL 连接验证。
+**测试记录**: 2026-04-27，使用本地 conda `py311` 环境和临时 SQLite 数据库验证 `alembic upgrade head`、`alembic downgrade -1`、再次 `alembic upgrade head` 均成功；升级后包含 `users, resources, categories, contacts, faqs, audit_logs, site_settings` 7 张业务表。`docker compose config` 解析通过。当时本机 `localhost:5432` 无 PostgreSQL 响应、Docker daemon 未运行，未进行真实 PostgreSQL 连接验证。
 
 **完成时间**: 2026-04-27
 
@@ -1046,6 +1109,9 @@ pytest tests/test_auth.py -v -k "admin"
 - `GET /api/v1/admin/users?page=1&page_size=20` — 用户列表
 - `PATCH /api/v1/admin/users/{id}` — 修改角色/状态
 
+当前列表响应统一为分页对象：`items`、`total`、`page`、`page_size`、`pages`。
+这是 `/admin/users` 的唯一现行契约，前端不得再按顶层数组读取用户。
+
 前端需做：
 1. 取消注释 `api.admin.getUsers()` 调用，移除 mock 数据
 2. 对接状态切换（active ↔ suspended）
@@ -1129,47 +1195,37 @@ pytest tests/test_auth.py -v -k "admin"
 
 **文件**: `backend/app/api/v1/resources.py`
 
-新增端点：
+当前端点职责：
 
 ```python
-@router.get("/{slug}/access")
+@router.get("/{slug}/access", response_model=ResourceAccessCheckResponse)
 async def get_resource_access(
     slug: str,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user)
 ):
-    """
-    返回云盘链接（含提取码）。
-    - 免费资源：直接返回
-    - 付费资源：校验用户已购买（F07 完成后接入 Order 表，当前阶段仅允许管理员或免费资源）
-    """
-    result = await db.execute(select(Resource).where(Resource.slug == slug))
-    resource = result.scalar_one_or_none()
-    if not resource or not resource.is_published:
-        raise HTTPException(status_code=404, detail="资源不存在")
+    """只校验免费策略或 paid 订单，返回 has_access，不交付链接、不计下载。"""
+    await get_authorized_resource(db, slug, current_user)
+    return ResourceAccessCheckResponse(has_access=True)
 
-    # 付费资源的访问控制（F07 完成前：仅免费资源可访问）
-    if not resource.is_free:
-        if current_user is None:
-            raise HTTPException(status_code=401, detail="请先登录")
-        # TODO(F07): 校验 Order 表是否有已完成订单
-        # 暂时返回 402 提示需要购买
-        raise HTTPException(status_code=402, detail="请先购买该资源")
 
-    # 递增下载计数
-    resource.download_count += 1
+@router.post("/{slug}/download", response_model=ResourceAccessResponse)
+async def download_resource(...):
+    """显式交付云盘字段，并使用原子 UPDATE 增加一次 download_count。"""
+    resource = await get_authorized_resource(db, slug, current_user)
+    await db.execute(
+        update(Resource)
+        .where(Resource.id == resource.id)
+        .values(download_count=Resource.download_count + 1)
+    )
     await db.commit()
-
-    return {
-        "cloud_link": resource.cloud_link,
-        "backup_links": resource.backup_links,
-        "access_code": resource.access_code,
-    }
+    return build_resource_access(resource)
 ```
 
 在 `src/lib/api.ts` 的 `resources` 对象中补充：
 ```typescript
 getAccess: (slug: string) => apiClient.get(`/resources/${slug}/access`),
+download: (slug: string) => apiClient.post(`/resources/${slug}/download`),
 ```
 
 ### F05-T2：前端——资源详情页交付区域
@@ -1182,30 +1238,34 @@ getAccess: (slug: string) => apiClient.get(`/resources/${slug}/access`),
 
 ```
 免费资源：
-  页面加载时自动调用 /resources/{slug}/access
-  → 展示云盘链接（可点击）和可复制的提取码
+  → 直接显示“获取资源”按钮
+  → 用户点击后 POST /resources/{slug}/download
+  → 展示云盘链接（可点击）和可复制的提取码，并记录一次下载
 
 付费资源 + 未登录：
   → 显示价格 + "登录后购买"按钮 → 点击跳转 /login
 
 付费资源 + 已登录 + 未购买：
+  → GET /resources/{slug}/access 返回 402
   → 显示价格 + "立即购买"按钮 → 点击进入支付流程（F09 实现）
 
 付费资源 + 已登录 + 已购买：
-  → 调用 /resources/{slug}/access 展示链接（F07 完成后实现）
+  → GET /resources/{slug}/access 仅确认 has_access
+  → 显示“获取资源”按钮，点击 POST /resources/{slug}/download 后展示链接
 ```
 
-当前 F05 只实现"免费资源展示链接"这条路径，付费路径预留骨架。
+权限检查与交付动作必须分离，页面挂载或购买后的权限刷新不能增加下载计数。
 
 ### F05 测试
 
 ```bash
 cd backend
 pytest tests/ -v -k "access"
-# 需新增测试：
-# - 免费资源返回云盘链接
+# 覆盖：
+# - 免费资源 access 只返回 has_access，download 才返回云盘字段
 # - 付费资源未登录返回 401
-# - 付费资源已登录返回 402（F07 前的占位）
+# - 付费资源已登录未购买返回 402，paid 订单允许 download
+# - access 无副作用，download 原子计数
 ```
 
 **前端手动验证**：
@@ -1215,15 +1275,17 @@ pytest tests/ -v -k "access"
 
 ### F05 验收标准
 
-- [x] `GET /api/v1/resources/{slug}/access` 端点存在
-- [x] 免费资源调用返回 `cloud_link` + `access_code`
+- [x] `GET /api/v1/resources/{slug}/access` 仅返回 `has_access`，不返回交付字段、不计下载
+- [x] `POST /api/v1/resources/{slug}/download` 返回 `cloud_link/backup_links/access_code` 并原子计数
 - [x] 付费资源未登录返回 401，已登录未购买返回 402
-- [x] 资源详情页免费资源展示链接（复制按钮）
+- [x] 资源详情页仅在用户明确点击“获取资源”后展示链接（含复制按钮）
 - [x] 付费资源展示价格和购买入口（按钮当前可以是占位）
 - [x] 后端测试覆盖
 - [x] 更新本文档 F05 状态为 ✅
 
 **测试记录**: 2026-04-28，运行 `pytest tests/test_auth.py tests/test_resource_access.py -v`，结果 10 passed；运行 `npx tsc --noEmit`，结果通过。额外补充公开资源详情不返回 `cloud_link/access_code/backup_links` 的回归测试，避免绕过 `/access` 接口。
+
+**最终契约复核**: 2026-09-10，修复 `GET /access` 可直接取得交付数据造成的计数绕过；当前仅 `POST /download` 可交付并原子计数，前端挂载和权限刷新均无下载副作用，相关回归已纳入最新全量门禁。
 
 **完成时间**: 2026-04-28
 
@@ -1492,7 +1554,7 @@ pytest tests/test_orders.py -v
 - [x] `POST /api/v1/orders` 创建订单
 - [x] `GET /api/v1/orders/my` 返回当前用户订单
 - [x] 免费资源下单后直接 paid，可访问云盘链接
-- [x] 付费资源已有 paid 订单后，`/resources/{slug}/access` 返回链接
+- [x] 付费资源已有 paid 订单后，`GET /resources/{slug}/access` 返回 `has_access=true`，`POST /resources/{slug}/download` 返回链接
 - [x] 后端测试全部通过
 - [x] `src/lib/api.ts` 补充 orders 相关方法
 - [x] 更新本文档 F07 状态为 ✅
@@ -1569,7 +1631,7 @@ ALIPAY_SANDBOX: bool = True     # 沙箱模式
 # 2. 获取支付链接（POST /payments/alipay/create）
 # 3. 在支付宝沙箱完成支付
 # 4. 验证异步回调修改订单状态
-# 5. 验证 GET /resources/{slug}/access 可返回链接
+# 5. 验证 GET /resources/{slug}/access 返回 has_access，再由 POST /download 返回链接
 ```
 
 单元测试（mock 支付宝 SDK）：
@@ -1612,11 +1674,11 @@ pytest tests/test_payments.py -v
 
 ```
 未登录          → 显示价格 + "登录后购买"（跳 /login?redirect=/resources/{slug}）
-已登录 + 免费  → 显示云盘链接 + 提取码（复制按钮）
-已登录 + 已购买 → 显示云盘链接 + 提取码
+已登录 + 免费  → 显示“获取资源”，点击 POST /download 后展示链接 + 提取码
+已登录 + 已购买 → GET /access 确认权限，点击 POST /download 后展示链接 + 提取码
 已登录 + 未购买 → 显示价格 + "立即购买"按钮
 点击购买        → 调用 POST /orders，拿到 order_no → 调用 POST /payments/alipay/create → 跳转到支付宝收银台
-支付完成跳回    → 轮询或等待几秒，重新调用 /resources/{slug}/access 确认已付款
+支付完成跳回    → 轮询或等待几秒，重新调用 GET /resources/{slug}/access 确认已付款
 ```
 
 ### F09-T2：我的订单页面
@@ -1625,7 +1687,7 @@ pytest tests/test_payments.py -v
 
 - 调用 `GET /api/v1/orders/my`
 - 每条订单展示：资源名称、订单号、金额、状态、下单时间
-- paid 状态展示"获取资源"按钮，点击调用 `/resources/{slug}/access`
+- paid 状态展示"获取资源"按钮，先以 `GET /resources/{slug}/access` 确认权限，点击交付调用 `POST /resources/{slug}/download`
 
 ### F09-T3：管理后台订单列表
 
@@ -1769,13 +1831,16 @@ if await r.get(f"blacklist:{token}"):
 - [x] 更新本文档 F10 状态为 ✅
 
 **测试记录**: 2026-05-10，完成注册/登录限流、token refresh、logout 黑名单和前端登出调用后端。运行 `conda run -n py311 python -m pytest tests/ -v`，结果 70 passed；运行 `npx tsc --noEmit --incremental false`，结果通过。
+
+**当前实现复核（2026-09-10）**: 登录现签发不同 `typ` 的 access/refresh token，refresh token 在 Redis 中原子轮换并阻止重放，旧无 `typ` JWT 仅保留一次兼容刷新路径；密码重置与登出通过 `auth_version` 撤销旧会话。前端单标签页合并并发 refresh，同时在多标签页场景优先采用 `localStorage` 中已被其他标签页更新的 token；过时请求的 401 或旧 refresh 失败不会删除更新后的会话。
+
 **完成时间**: 2026-05-10
 
 ---
 
 ## F11 · 监控补全
 
-**优先级**: P2 | **状态**: ✅ 已验收
+**优先级**: P2 | **状态**: 🟡 配置完成，运行验收待执行
 
 ### F11-T1：修复 docker-compose.yml 端口文档
 
@@ -1868,15 +1933,18 @@ Dashboard 包含：
 
 ### F11 验收标准
 
-- [x] `docker-compose up -d` 所有服务健康启动（本轮未启动容器，已用 `docker compose config` 校验配置和挂载路径）
-- [x] Grafana 访问 `http://localhost:3001` 可见 Prometheus + Loki 数据源（已配置 datasource provisioning）
-- [x] 基础 Dashboard 显示 API 指标（已配置 dashboard provisioning 和请求指标采集）
-- [x] Loki 中可查看 backend 日志（已配置 Promtail backend 日志采集）
+- [ ] `docker compose up -d --build` 后所有服务健康启动（配置解析和挂载路径已校验，完整运行验收待执行）
+- [ ] Grafana 访问 `http://localhost:3001` 可见 Prometheus + Loki 数据源（provisioning 已配置，浏览器运行验收待执行）
+- [ ] 基础 Dashboard 显示 API 指标（dashboard 与请求指标采集已配置，运行数据待验收）
+- [ ] Loki 中可查看 backend 日志（Promtail 采集已配置，端到端日志链路待验收）
 - [x] README 端口说明正确
-- [x] 更新本文档 F11 状态为 ✅
+- [x] 更新本文档 F11 状态为 🟡
 
-**测试记录**: 2026-05-12，补齐 Promtail、Grafana datasource、Grafana dashboard，并让 performance middleware 写入 `http_requests_total` 和 `http_request_duration_seconds`。运行文件存在性检查、`python3 -m json.tool monitoring/grafana/provisioning/dashboards/ibooks.json`、`docker compose config`、`conda run -n py311 python -m pytest tests/ -v`（70 passed）、`npx tsc --noEmit --incremental false`（通过）。未执行 `docker-compose up -d`，未实际打开 Grafana 浏览器页面。
-**完成时间**: 2026-05-12
+**测试记录**: 2026-05-12，补齐 Promtail、Grafana datasource、Grafana dashboard，并让 performance middleware 写入 `http_requests_total` 和 `http_request_duration_seconds`。运行文件存在性检查、`python3 -m json.tool monitoring/grafana/provisioning/dashboards/ibooks.json`、`docker compose config`、`conda run -n py311 python -m pytest tests/ -v`（70 passed）、`npx tsc --noEmit --incremental false`（通过）。未执行 `docker compose up -d`，未实际打开 Grafana 浏览器页面。
+
+**最新静态加固记录**: 2026-09-10，Compose 已将所有宿主机端口默认绑定到 `127.0.0.1`，PostgreSQL、Redis、exporter、Loki 与 Promtail 仅保留在内部网络；应用容器改为非 root，后端日志、上传和 SEO 产物使用命名卷，并增加监控保留期与 Docker 日志轮转变量。Loki TSDB v13 使用新卷 `loki_tsdb_data`，旧 `loki_data` 不会自动删除；Grafana、Loki、Promtail 健康检查使用各自镜像中实际可用的工具。`docker compose config --quiet` 通过，但这些静态结果不替代完整服务栈与 Grafana/Loki 运行验收。
+
+**配置完成时间**: 2026-05-12
 
 ---
 
@@ -1981,8 +2049,8 @@ pip install fakeredis
 ### F12-T7：Settings API 测试
 
 **小功能自测**:
-- [x] 公开设置只返回 `footer/general/appearance` 分类，并支持公开分类过滤。
-- [x] 私有分类设置不会通过公开列表或公开详情泄露。
+- [x] 公开设置以显式 key 白名单过滤，并支持在白名单内按分类查询；分类名称本身不作为安全边界。
+- [x] 匿名响应项只包含 `key/value`，私有设置及 `category/description/updated_at/updated_by` 等后台元数据不会通过公开列表或详情泄露。
 - [x] 普通用户访问 admin 设置列表、分组、更新、批量更新均返回 403。
 - [x] 管理员可查看全部设置和按分类分组设置。
 - [x] 管理员可更新已有设置，缺失 key 返回 404。
@@ -2040,7 +2108,7 @@ pip install fakeredis
 
 ## F13 · 前端测试补全
 
-**优先级**: P2 | **状态**: ⬜ 未开始
+**优先级**: P2 | **状态**: ✅ 完成
 
 ### 安装测试工具
 
@@ -2063,18 +2131,20 @@ npm install --save-dev jest @testing-library/react @testing-library/jest-dom jes
 
 ### F13 验收标准
 
-- [ ] `npm test` 全部通过
-- [ ] `useAdminAuth` 角色校验逻辑有测试覆盖
-- [ ] 核心组件（ResourceCard、SearchBar）有渲染测试
-- [ ] 更新本文档 F13 状态为 ✅
+- [x] `npm test` 全部通过
+- [x] `useAdminAuth` 角色校验逻辑有测试覆盖
+- [x] 核心组件（ResourceCard、SearchBar）有渲染测试
+- [x] 更新本文档 F13 状态为 ✅
 
-**完成时间**: ___________
+**最新回归记录**: 2026-09-10，前端升级到 Next.js `15.5.25`，锁文件解析 Axios `1.20.0`、PostCSS `8.5.28`，lint 脚本使用非交互 ESLint CLI；Jest `33 suites / 104 tests`、`tsc --noEmit`、ESLint、Next.js 完整生产构建与 `npm audit` 均通过，`npm audit` 为 0 漏洞。
+
+**完成时间**: 2026-08-19
 
 ---
 
 ## F14 · SEO 自动提交
 
-**优先级**: P3 | **状态**: ⬜ 未开始 | **依赖**: F11
+**优先级**: P3 | **状态**: 🟡 代码完成，外部联调待验收 | **依赖**: F11
 
 ### F14-T1：百度站长平台 URL 推送
 
@@ -2084,12 +2154,13 @@ npm install --save-dev jest @testing-library/react @testing-library/jest-dom jes
 
 ```python
 async def push_to_baidu(urls: list[str]) -> dict:
-    """推送 URL 到百度站长平台。需配置 BAIDU_API_KEY。"""
+    """推送 URL 到百度站长平台；仅启用百度提交时需要 BAIDU_API_KEY。"""
     if not settings.SEO_SUBMIT_BAIDU or not settings.BAIDU_API_KEY:
         return {"skipped": True}
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"http://data.zz.baidu.com/urls?site={settings.SITE_URL}&token={settings.BAIDU_API_KEY}",
+            "https://data.zz.baidu.com/urls",
+            params={"site": settings.SITE_URL, "token": settings.BAIDU_API_KEY},
             content="\n".join(urls),
             headers={"Content-Type": "text/plain"},
         )
@@ -2098,28 +2169,36 @@ async def push_to_baidu(urls: list[str]) -> dict:
 
 在 `POST /api/v1/seo/generate-sitemap` 端点完成后自动触发 URL 推送。
 
+应用启动路径与手动推送路径已分离：`SEO_AUTO_GENERATE=true` 只在本地生成
+`sitemap.xml`、`rss.xml`、`robots.txt`，使用短生命周期数据库会话并隔离失败，
+不会读取提交开关去访问百度、Google 或 360。资源静态 HTML 仍由 staff 接口按需生成。
+
 ### F14-T2：管理后台 SEO 推送状态
 
 **文件**: `frontend/src/app/admin/page.tsx` 或新建 SEO 管理页
 
 在仪表盘或管理页增加"SEO 操作"区域：
-- 按钮：生成 Sitemap（调用 `POST /seo/generate-all`）
+- 按钮：生成全部 SEO 文件（调用 `POST /seo/generate-all`，等待 sitemap/RSS/robots 的真实结果并展示文件清单）
 - 按钮：推送到百度（显示推送 URL 数量和返回状态）
 
 ### F14 验收标准
 
-- [ ] 配置 `SEO_SUBMIT_BAIDU=true` 和 `BAIDU_API_KEY` 后，生成 sitemap 触发百度推送
-- [ ] 推送结果（成功 URL 数）写入日志
-- [ ] 管理后台有 SEO 操作入口
-- [ ] 更新本文档 F14 状态为 ✅
+- [x] 生成 sitemap 后触发百度推送的代码路径与模拟测试已完成
+- [x] 推送结果（成功 URL 数）写入日志
+- [x] 管理后台有 SEO 操作入口
+- [x] `SEO_AUTO_GENERATE` enabled/disabled/failure/no-external-submit 与生命周期继续启动测试通过
+- [x] `POST /seo/generate-all` 全部成功返回 `generated` 清单；部分失败返回安全 500，并分别列出 `generated/failed` 文件
+- [x] `BAIDU_API_KEY` 仅在 `SEO_SUBMIT_BAIDU=true` 的显式提交路径需要，普通启动可留空
+- [ ] 使用真实 `BAIDU_API_KEY` 完成百度站长平台公网联调
+- [x] 更新本文档 F14 状态为 🟡
 
-**完成时间**: ___________
+**完成时间**: 2026-08-19（真实百度提交待凭据）
 
 ---
 
 ## F15 · 前端体验优化
 
-**优先级**: P3 | **状态**: ⬜ 未开始
+**优先级**: P3 | **状态**: ✅ 已验收
 
 ### F15-T1：分类页资源联动筛选
 
@@ -2153,14 +2232,17 @@ async def push_to_baidu(urls: list[str]) -> dict:
 
 ### F15 验收标准
 
-- [ ] 分类页点击分类即时筛选资源
-- [ ] FAQ 页数据来自后端
-- [ ] 联系方式根据 `display_location` 展示到正确位置
-- [ ] iPhone 13（375px）下首页和资源详情页无横向溢出
-- [ ] 管理后台在 768px 以下可用
-- [ ] 更新本文档 F15 状态为 ✅
+- [x] 分类页点击分类即时筛选资源
+- [x] FAQ 页数据来自后端
+- [x] 联系方式按现有 `show_in_*` 展示标记分配到正确位置
+- [x] FAQ、联系方式、分类列表和分类资源均区分“加载失败”与“真实空数据”，失败时显示明确错误态并在可重试交互中保留当前筛选
+- [x] 管理后台在 768px 以下可用
+- [x] iPhone 13（375px）下首页和资源详情页无横向溢出
+- [x] 更新本文档 F15 状态为 ✅
 
-**完成时间**: ___________
+**浏览器验收记录**: 2026-09-10，覆盖 10 个公开路由 × 桌面/375px 两种视口，共 20 组；全部返回 HTTP 200，`brokenImages=0`、控制台错误为 0、失败响应为 0，且每组均满足 `scrollWidth === innerWidth`。本轮修复历史封面与 `/og-image`，并停用 seed 数据中的无效二维码。
+
+**完成时间**: 2026-09-10
 
 ---
 
@@ -2208,19 +2290,22 @@ async def push_to_baidu(urls: list[str]) -> dict:
 ### 性能与监控验收
 
 1. 打开 `http://localhost:3001`（Grafana）确认数据正常
-2. 检查 `logs/backend/access.log` 有真实请求记录
-3. 触发一个 >500ms 的慢请求，确认 `logs/backend/performance.log` 有告警记录
+2. 发起真实 API 请求，在 Grafana Explore 或 Loki 日志面板确认 `backend_logs` 命名卷中的 `access.log` 已被 Promtail 采集
+3. 触发一个 >500ms 的慢请求，在 Loki 中确认 `performance.log` 有对应记录；仅非 Docker 本地运行时才直接检查 `LOG_DIR`（默认 `backend/logs`）
 
 ### 整体验收标准
 
 - [ ] 所有未被方向调整替代的 F 任务状态为 ✅
 - [ ] N01~N08 状态为 ✅
 - [ ] 端到端场景 A/B/B2/C/D 全部通过；若缺少支付宝沙箱凭证，B2 明确记录为外部条件阻塞
-- [ ] `pytest tests/ --cov=app` 整体覆盖率 ≥ 70%
-- [ ] `npm test` 前端测试全部通过
-- [ ] `docker-compose up -d` 全部服务健康
+- [x] `pytest tests/ --cov=app` 整体覆盖率 ≥ 70%（2026-09-10：292 passed，总覆盖率 72.42%）
+- [x] `npm test` 前端测试全部通过（2026-09-10：33 suites / 104 tests passed）
+- [x] 前端 `tsc --noEmit`、ESLint 与 `npm audit` 通过，依赖审计为 0 已知漏洞
+- [x] 前端完整生产构建通过
+- [x] Alembic 全新数据库 `upgrade -> downgrade -1 -> upgrade`、`alembic check` 及 paid 订单部分唯一索引验证通过
+- [ ] `docker compose up -d --build` 全部服务健康
 - [ ] Grafana 监控正常运行
-- [ ] README/QUICKSTART/DEPLOYMENT 与实际功能一致（无过期直付资源描述）
+- [x] README/QUICKSTART/DEPLOYMENT 与实际功能一致（2026-09-10 已复核站内币主流程、可选百度凭据、启动命令、端口绑定、命名卷、监控保留期与未完成验收边界）
 
 ---
 
@@ -2241,8 +2326,10 @@ async def push_to_baidu(urls: list[str]) -> dict:
 | 2026-05-10 | F10 安全加固 | Codex | 新增认证限流、token refresh、logout 黑名单和前端登出调用后端，70 passed，tsc passed |
 | 2026-05-12 | F11 监控补全 | Codex | 补齐 Promtail、Grafana 数据源和 Dashboard provisioning，新增请求指标采集，70 passed，tsc passed，docker compose config passed |
 | 2026-05-12 | F12 后端测试补全 | Codex | 新增/补齐后端 API 测试至 113 passed，覆盖率 72%，无 warning summary；修复资源、分类、CSV 导入、SEO 后台任务等测试暴露问题 |
+| 2026-07-29 | 发布阻塞修复 | Codex | 修复前端 useSearchParams 生产构建、管理员资源详情/书币价格、批量导入、审计日志、用户注册入口；接线 crawler 路由，补充资源爬虫迁移和安全响应头；前端 tsc/build 通过，后端全量测试待环境恢复 |
+| 2026-09-10 | 收尾修复与质量门禁 | Codex | 完成生产配置、审计、上传、鉴权可靠性、搜索/爬虫草稿策略、moderator 权限、爬虫批量查重与跨进程租约、订单并发、邮件一致性、SEO 启动生成、schema bootstrap、资源权限/交付拆分、公开设置最小响应、多标签页 refresh 竞态、SEO generate-all 真实结果、公开页错误/空态和 admin 用户分页契约修复；后端全量 292 passed、总覆盖率 72.42%，Ruff/pip check/pip-audit 0 漏洞；前端 Next.js 15.5.25，33 suites/104 tests、tsc/ESLint/完整生产构建/npm audit 通过且审计 0 漏洞；10 个公开路由的桌面/375px 共 20 组浏览器回归通过；Alembic 全新数据库往返与 check 通过；生产 Compose/Grafana、支付宝/SMTP/百度真实联调仍待外部条件，Google/360 待产品确认 |
 
 ---
 
-*文档版本: v1.1 | 最后更新: 2026-05-12*  
+*文档版本: v1.5 | 最后更新: 2026-09-12*
 *Codex 每完成一个小功能，请先运行对应最小测试并更新小功能勾选；每完成一个大功能，请填写测试记录、完成时间，并更新总览表中的状态。*

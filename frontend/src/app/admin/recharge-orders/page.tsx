@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { api, getApiErrorMessage } from '@/lib/api';
 import type { PaginatedResponse, RechargeOrder, RechargeOrderStatus } from '@/types';
 
 const statusLabels: Record<RechargeOrderStatus, string> = {
@@ -24,7 +24,7 @@ export default function AdminRechargeOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    const loadOrders = async (targetPage = page) => {
+    const loadOrders = useCallback(async (targetPage: number) => {
         setLoading(true);
         setError('');
         try {
@@ -38,16 +38,16 @@ export default function AdminRechargeOrdersPage() {
             setPage(data.page);
             setPages(data.pages);
             setTotal(data.total);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '充值订单加载失败');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '充值订单加载失败'));
         } finally {
             setLoading(false);
         }
-    };
+    }, [status]);
 
     useEffect(() => {
-        loadOrders(1);
-    }, [status]);
+        void loadOrders(1);
+    }, [loadOrders]);
 
     return (
         <div className="space-y-6">

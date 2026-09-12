@@ -3,11 +3,26 @@ Order model for resource purchases.
 """
 from datetime import datetime
 import enum
+from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, Numeric, String, Text
+from sqlalchemy import (
+    DateTime,
+    Enum as SQLEnum,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.utils.datetime_utils import utc_now
+
+if TYPE_CHECKING:
+    from app.models.resource import Resource
+    from app.models.user import User
 
 
 class OrderStatus(str, enum.Enum):
@@ -30,6 +45,16 @@ class Order(Base):
     """Order model for tracking resource purchases."""
 
     __tablename__ = "orders"
+    __table_args__ = (
+        Index(
+            "uq_orders_paid_user_resource",
+            "user_id",
+            "resource_id",
+            unique=True,
+            postgresql_where=text("status = 'PAID'"),
+            sqlite_where=text("status = 'PAID'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     order_no: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
@@ -50,11 +75,11 @@ class Order(Base):
     payment_raw: Mapped[str | None] = mapped_column(Text)
 
     paid_at: Mapped[datetime | None] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False
     )
 

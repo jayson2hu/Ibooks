@@ -1,11 +1,14 @@
 """
 Security utilities for password hashing and JWT token management.
 """
-from datetime import datetime, timedelta
+from datetime import timedelta
+import secrets
 from typing import Optional, Dict, Any
+import jwt
 from passlib.context import CryptContext
-from jose import JWTError, jwt
+from jwt.exceptions import PyJWTError
 from app.config import settings
+from app.utils.datetime_utils import utc_now
 
 
 # Password hashing context
@@ -22,6 +25,37 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+ACCESS_TOKEN_TYPE = "access"
+REFRESH_TOKEN_TYPE = "refresh"
+
+
+def _create_token(
+    data: Dict[str, Any],
+    *,
+    expires_delta: timedelta,
+    token_type: str,
+) -> str:
+    """Create a typed JWT with a unique identifier."""
+    to_encode = data.copy()
+    if "sub" in to_encode:
+        to_encode["sub"] = str(to_encode["sub"])
+
+    now = utc_now()
+    to_encode.update(
+        {
+            "exp": now + expires_delta,
+            "iat": now,
+            "jti": secrets.token_urlsafe(16),
+            "typ": token_type,
+        }
+    )
+    return jwt.encode(
+        to_encode,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
+
+
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """
     Create a JWT access token.
@@ -33,28 +67,21 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     Returns:
         Encoded JWT token string
     """
-    to_encode = data.copy()
-    
-    # Ensure subject is a string (required by JWT spec and python-jose)
-    if "sub" in to_encode:
-        to_encode["sub"] = str(to_encode["sub"])
-    
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(
-            minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-        )
-    
-    to_encode.update({"exp": expire, "iat": datetime.utcnow()})
-    
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.JWT_SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM
+    return _create_token(
+        data,
+        expires_delta=expires_delta
+        or timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES),
+        token_type=ACCESS_TOKEN_TYPE,
     )
-    
-    return encoded_jwt
+
+
+def create_refresh_token(data: Dict[str, Any]) -> str:
+    """Create a refresh-only JWT with the configured lifetime."""
+    return _create_token(
+        data,
+        expires_delta=timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
+        token_type=REFRESH_TOKEN_TYPE,
+    )
 
 
 def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
@@ -74,7 +101,7 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
             algorithms=[settings.JWT_ALGORITHM]
         )
         return payload
-    except JWTError:
+    except PyJWTError:
         return None
 
 

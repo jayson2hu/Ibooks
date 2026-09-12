@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, getApiErrorMessage } from '@/lib/api';
 
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState('');
@@ -19,8 +19,8 @@ export default function ForgotPasswordPage() {
         try {
             const response = await api.auth.forgotPassword(email);
             setMessage(response.data?.message || '如果邮箱存在，我们已发送密码重置邮件');
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '提交失败，请稍后重试');
+        } catch (error: unknown) {
+            setError(getApiErrorMessage(error, '提交失败，请稍后重试'));
         } finally {
             setLoading(false);
         }
